@@ -1,6 +1,6 @@
 {
 	"name": "AI Assistant Settings",
-	"module": "ai_module",
+	"module": "AI Module",
 	"doctype": "DocType",
 	"custom": 0,
 	"istable": 0,

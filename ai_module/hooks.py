@@ -1,7 +1,7 @@
 app_name = "ai_module"
 app_title = "ai-module"
 app_publisher = "Techloop"
-app_description = "Un modulo sviluppato daTechloop che permette l\'integrazione di modelli LLM nel environment Frappe"
+app_description = "Un modulo sviluppato daTechloop che permette l'integrazione di modelli LLM nel environment Frappe"
 app_email = "emailditechloop@email.it"
 app_license = "unlicense"
 
@@ -83,7 +83,7 @@ app_license = "unlicense"
 # ------------
 
 # before_install = "ai_module.install.before_install"
-# after_install = "ai_module.install.after_install"
+after_install = "ai_module.install.after_install"
 
 # Uninstallation
 # ------------
@@ -196,12 +196,12 @@ app_license = "unlicense"
 
 # Request Events
 # ----------------
-# before_request = ["ai_module.utils.before_request"]
+before_request = ["ai_module.agents.bootstrap.before_request"]
 # after_request = ["ai_module.utils.after_request"]
 
 # Job Events
 # ----------
-# before_job = ["ai_module.utils.before_job"]
+before_job = ["ai_module.agents.bootstrap.before_job"]
 # after_job = ["ai_module.utils.after_job"]
 
 # User Data Protection

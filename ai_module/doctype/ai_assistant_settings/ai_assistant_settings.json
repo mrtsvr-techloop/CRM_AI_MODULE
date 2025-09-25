@@ -1,0 +1,32 @@
+{
+	"name": "AI Assistant Settings",
+	"module": "ai_module",
+	"doctype": "DocType",
+	"custom": 0,
+	"istable": 0,
+	"is_tree": 0,
+	"editable_grid": 0,
+	"track_changes": 0,
+	"quick_entry": 0,
+	"allow_rename": 0,
+	"allow_import": 0,
+	"issingle": 1,
+	"allow_guest_to_view": 0,
+	"title_field": "instructions",
+	"fields": [
+		{
+			"fieldname": "instructions",
+			"label": "Instructions",
+			"fieldtype": "Text Editor",
+			"reqd": 1,
+			"description": "System prompt used for the OpenAI Assistant"
+		}
+	],
+	"permissions": [
+		{
+			"role": "System Manager",
+			"read": 1,
+			"write": 1
+		}
+	]
+} 

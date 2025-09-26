@@ -13,7 +13,7 @@ class AIAssistantSettings(Document):
 
 	def on_update(self):
 		# Upsert the Assistant whenever settings are saved
-		from ai_module.ai_module.agents.assistant_update import upsert_assistant
+		from ai_module.agents.assistant_update import upsert_assistant
 
 		upsert_assistant(force=True)
 
@@ -21,6 +21,6 @@ class AIAssistantSettings(Document):
 @frappe.whitelist(methods=["POST"])
 def ai_assistant_force_update() -> str:
 	"""Manual button action to force update of Assistant even without changes."""
-	from ai_module.ai_module.agents.assistant_update import upsert_assistant
+	from ai_module.agents.assistant_update import upsert_assistant
 
 	return upsert_assistant(force=True) 

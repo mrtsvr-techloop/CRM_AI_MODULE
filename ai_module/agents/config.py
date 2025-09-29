@@ -4,6 +4,7 @@ import os
 from typing import Dict, Optional
 
 import frappe
+from frappe.utils.html_utils import clean_html
 
 
 def _get_frappe_environment() -> Dict[str, str]:
@@ -50,9 +51,9 @@ def apply_environment() -> None:
 	- AI_SESSION_DB (optional, SQLite path for session memory)
 	- AI_SESSION_MODE (optional: "local" or "openai_threads")
 	- AI_OPENAI_ASSISTANT_ID (required when AI_SESSION_MODE=openai_threads)
-	- AI_ASSISTANT_NAME (required to auto-create Assistant)
-	- AI_ASSISTANT_INSTRUCTIONS (required to auto-create Assistant)
-	- AI_ASSISTANT_MODEL (required to auto-create Assistant)
+	- AI_ASSISTANT_NAME (optional)
+	- AI_ASSISTANT_INSTRUCTIONS (optional)
+	- AI_ASSISTANT_MODEL (optional)
 	"""
 	env = get_environment()
 	for key in (
@@ -148,15 +149,29 @@ def get_openai_assistant_id() -> Optional[str]:
 	return _get_persisted_assistant_id()
 
 
-def get_env_assistant_spec() -> Dict[str, str]:
-	"""Return Assistant spec strictly from environment variables.
+def get_settings_prompt_only() -> Optional[str]:
+	"""Return plain-text prompt/instructions from the Doctype only.
 
-	Requires all of: AI_ASSISTANT_NAME, AI_ASSISTANT_INSTRUCTIONS, AI_ASSISTANT_MODEL
+	Uses AI Assistant Settings.instructions, strips HTML, returns None if empty.
+	"""
+	try:
+		doc = frappe.get_single("AI Assistant Settings")
+		instr_html = doc.instructions or ""
+		instr = clean_html(instr_html).strip()
+		return instr or None
+	except Exception:
+		return None
+
+
+def get_env_assistant_spec() -> Optional[Dict[str, str]]:
+	"""Return Assistant spec strictly from environment variables if fully provided.
+
+	No exceptions are raised; returns None when any required piece is missing.
 	"""
 	env = get_environment()
 	name = env.get("AI_ASSISTANT_NAME")
 	instructions = env.get("AI_ASSISTANT_INSTRUCTIONS")
 	model = env.get("AI_ASSISTANT_MODEL")
 	if not (name and instructions and model):
-		raise RuntimeError("AI_ASSISTANT_NAME, AI_ASSISTANT_INSTRUCTIONS, AI_ASSISTANT_MODEL must be set in environment to auto-create Assistant")
+		return None
 	return {"name": name, "instructions": instructions, "model": model} 

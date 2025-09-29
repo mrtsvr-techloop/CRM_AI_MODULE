@@ -15,6 +15,27 @@
 	"title_field": "instructions",
 	"fields": [
 		{
+			"fieldname": "assistant_name",
+			"label": "Assistant Name",
+			"fieldtype": "Data",
+			"read_only": 0,
+			"description": "Display name for the Assistant"
+		},
+		{
+			"fieldname": "model",
+			"label": "Model",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "Effective model used (from env/conf or default)"
+		},
+		{
+			"fieldname": "project",
+			"label": "Project",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "Provider project/organization (read-only)"
+		},
+		{
 			"fieldname": "instructions",
 			"label": "Instructions",
 			"fieldtype": "Text Editor",

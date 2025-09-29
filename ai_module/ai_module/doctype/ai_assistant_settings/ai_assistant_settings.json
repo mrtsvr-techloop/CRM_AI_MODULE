@@ -18,8 +18,13 @@
 			"fieldname": "assistant_name",
 			"label": "Assistant Name",
 			"fieldtype": "Data",
-			"read_only": 0,
-			"description": "Display name for the Assistant"
+			"read_only": 1,
+			"description": "Display name for the Assistant (from environment)"
+		},
+		{
+			"fieldname": "section_env",
+			"label": "Environment",
+			"fieldtype": "Section Break"
 		},
 		{
 			"fieldname": "model",
@@ -33,7 +38,26 @@
 			"label": "Project",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "Provider project/organization (read-only)"
+			"description": "Provider project (from env/conf)"
+		},
+		{
+			"fieldname": "org_id",
+			"label": "Organization ID",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "Provider organization (from env/conf)"
+		},
+		{
+			"fieldname": "base_url",
+			"label": "Base URL",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "OpenAI compatible base URL (from env/conf)"
+		},
+		{
+			"fieldname": "section_prompt",
+			"label": "Prompt",
+			"fieldtype": "Section Break"
 		},
 		{
 			"fieldname": "instructions",

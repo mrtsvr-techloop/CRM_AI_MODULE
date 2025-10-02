@@ -132,3 +132,39 @@ Pre-commit is configured to use the following tools for checking and formatting 
 ### License
 
 unlicense
+
+### WhatsApp → AI auto-reply (no HTTP)
+
+Goal: respond via AI to a WhatsApp message received in the CRM without any HTTP hop between apps.
+
+What happens
+- Incoming `WhatsApp Message` (created by your webhook integration or CRM) triggers an AI-side listener.
+- The AI module forwards the message to the configured AI agent via Python import, not HTTP.
+- Session/thread persistence by sender phone ensures context continuity across messages.
+- Optional: the AI’s reply is sent back as an Outgoing `WhatsApp Message` via direct Python call into the CRM (still no HTTP).
+
+Where the logic lives
+- Listener hook: `ai_module/ai_module/hooks.py` (`doc_events` → `WhatsApp Message.after_insert`).
+- Handler: `ai_module/ai_module/integrations/whatsapp.py`.
+  - Filters: only Incoming and non-reaction messages.
+  - Builds a structured payload for the AI (text, content_type, attachments, reference doc, etc.).
+  - Determines the session strategy from env and persists threads when using OpenAI threads.
+  - Invokes `ai_module.api.ai_run_agent(...)` directly.
+  - If enabled by env, posts an Outgoing reply using CRM’s `create_whatsapp_message` (Python import; no HTTP).
+
+Environment variables
+- `AI_AGENT_NAME` (string): which registered agent to run (default: `crm_ai`).
+- `AI_SESSION_MODE` (string): `openai_threads` (default) or `local`.
+  - `openai_threads`: the listener maps the sender phone to a persistent OpenAI `thread_id` stored at `sites/<site>/private/files/ai_whatsapp_threads.json`.
+  - `local`: the listener uses `session_id = whatsapp:<sender_phone>`.
+- `AI_AUTOREPLY` (bool-like): when true (`1/true/yes/on`), the AI’s final output is automatically sent back as an Outgoing WhatsApp message via CRM’s `create_whatsapp_message`.
+- Standard OpenAI env (see earlier section): `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT`, `AI_OPENAI_ASSISTANT_ID`, `AI_ASSISTANT_NAME`, `AI_ASSISTANT_MODEL`.
+
+Reply mechanism (no duplication)
+- The AI module does not duplicate CRM logic. It imports and calls the CRM sender (`crm.api.whatsapp.create_whatsapp_message`) so all validations, realtime updates, and notifications continue to work as before.
+- The listener ignores non-Incoming messages, so auto-replies won’t loop back into the AI.
+
+Operational notes
+- If your WhatsApp webhook is provided by another app (e.g., `frappe_whatsapp`), keep using it. The AI listener triggers on document insert and remains provider-agnostic.
+- Media messages are forwarded to the AI with metadata; if no text is present, a short placeholder like `[non-text:image]` is sent alongside args so agents can reason on context.
+- Thread persistence file (`ai_whatsapp_threads.json`) is stored under the site’s private files; it can be safely backed up with the site.

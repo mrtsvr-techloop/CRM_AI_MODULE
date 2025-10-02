@@ -137,13 +137,11 @@ after_install = "ai_module.install.after_install"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"WhatsApp Message": {
+		"after_insert": "ai_module.integrations.whatsapp.on_whatsapp_after_insert",
+	}
+}
 
 # Scheduled Tasks
 # ---------------

@@ -38,6 +38,20 @@ class AIAssistantSettings(Document):
 		upsert_assistant(force=True)
 
 
+@frappe.whitelist(methods=["GET"])
+def ai_assistant_debug_env() -> dict:
+	"""Expose the same info as ai_debug_env for this DocType UI."""
+	from ai_module.api import ai_debug_env
+	return ai_debug_env()
+
+
+@frappe.whitelist(methods=["POST"])
+def ai_assistant_reset_persistence(clear_threads: bool = True) -> dict:
+	"""Expose reset persistence to delete saved assistant id and thread map."""
+	from ai_module.api import ai_reset_persistence
+	return ai_reset_persistence(clear_threads=clear_threads)
+
+
 @frappe.whitelist(methods=["POST"])
 def ai_assistant_force_update() -> str:
 	"""Manual button action to force update of Assistant even without changes."""

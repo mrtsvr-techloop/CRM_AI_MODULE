@@ -3,7 +3,7 @@ frappe.ui.form.on('AI Assistant Settings', {
     // Debug Environment
     frm.add_custom_button(__('Debug Environment'), () => {
       frappe.call({
-        method: 'ai_module.ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_debug_env',
+        method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_debug_env',
         callback(r) {
           const data = r.message || {};
           const pretty = JSON.stringify(data, null, 2);
@@ -22,7 +22,7 @@ frappe.ui.form.on('AI Assistant Settings', {
         __('Delete persisted Assistant ID and phone→thread map?'),
         () => {
           frappe.call({
-            method: 'ai_module.ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_reset_persistence',
+            method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_reset_persistence',
             args: { clear_threads: 1 },
             callback(r) {
               const info = r.message || {};
@@ -36,7 +36,7 @@ frappe.ui.form.on('AI Assistant Settings', {
     // Force Update Assistant
     frm.add_custom_button(__('Force Update Assistant'), () => {
       frappe.call({
-        method: 'ai_module.ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_force_update',
+        method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_force_update',
         callback(r) {
           const id = r.message;
           frappe.msgprint(__('Assistant updated: {0}', [id || 'OK']));

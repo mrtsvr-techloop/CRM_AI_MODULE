@@ -4,11 +4,8 @@ import frappe
 from frappe.model.document import Document
 
 from ai_module.agents.config import (
-    get_environment,
-    get_openai_assistant_id,
-    get_default_model,
-    get_session_mode,
-    get_session_db_path,
+	get_environment,
+	get_openai_assistant_id,
 )
 
 
@@ -24,13 +21,12 @@ class AIAssistantSettings(Document):
 		self.model = conf.get("AI_ASSISTANT_MODEL") or env.get("AI_ASSISTANT_MODEL") or ""
 		self.project = conf.get("OPENAI_PROJECT") or env.get("OPENAI_PROJECT") or ""
 		self.org_id = conf.get("OPENAI_ORG_ID") or env.get("OPENAI_ORG_ID") or ""
-		self.base_url = conf.get("OPENAI_BASE_URL") or env.get("OPENAI_BASE_URL") or ""
 		# Additional env-derived display fields
 		self.api_key_present = 1 if (conf.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")) else 0
-		self.assistant_id = get_openai_assistant_id() or ""
-		self.default_model = get_default_model() or ""
-		self.session_mode = get_session_mode() or ""
-		self.session_db = get_session_db_path() or ""
+		# Do not override user-entered assistant_id; only fill if empty
+		if not (self.assistant_id or "").strip():
+			self.assistant_id = get_openai_assistant_id() or ""
+		# Removed fields are no longer populated
 
 	def validate(self):
 		# Normalize instructions but do not hard-fail during install/first run

@@ -33,13 +33,13 @@ def upsert_assistant(force: bool = False) -> str:
 	Returns the assistant id.
 	"""
 	apply_environment()
-	spec_env = get_env_assistant_spec() or {}
+    spec_env = get_env_assistant_spec() or {}
 	instructions = get_current_instructions()
 	tools = get_current_tools()
 
-	# Provide safe defaults if env missing
-	name = spec_env.get("name") or frappe.db.get_single_value("AI Assistant Settings", "assistant_name") or "AI Assistant"
-	model = spec_env.get("model") or frappe.conf.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
+    # Provide safe defaults if env missing
+    name = spec_env.get("name") or frappe.db.get_single_value("AI Assistant Settings", "assistant_name") or "AI Assistant"
+    model = spec_env.get("model") or frappe.conf.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
 
 	# Do not initialize OpenAI client when running install or when API key is missing
 	if getattr(frappe.flags, "in_install", False):

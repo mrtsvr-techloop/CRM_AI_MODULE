@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import frappe
 
 from .agents import Agent, register_agent, register_tool, list_agents, list_tools, run_agent
-from .agents.config import apply_environment, get_environment, get_session_mode, get_openai_assistant_id, _assistant_id_file_path
+from .agents.config import apply_environment, get_environment, get_openai_assistant_id, _assistant_id_file_path
 
 
 @frappe.whitelist(methods=["GET"])
@@ -28,23 +28,21 @@ def ai_debug_env() -> Dict[str, Any]:
 		import os  # noqa: WPS433
 		return bool(path and os.path.exists(path))
 
-	# Only expose relevant keys; do not echo secrets back
-	visible_keys = {
-		"AI_AGENT_NAME",
-		"AI_SESSION_MODE",
-		"AI_OPENAI_ASSISTANT_ID",
-		"AI_ASSISTANT_NAME",
-		"AI_ASSISTANT_MODEL",
-		"AI_AUTOREPLY",
-		"OPENAI_BASE_URL",
-		"OPENAI_ORG_ID",
-		"OPENAI_PROJECT",
-	}
+    # Only expose relevant keys; do not echo secrets back
+    visible_keys = {
+        "AI_AGENT_NAME",
+        "AI_OPENAI_ASSISTANT_ID",
+        "AI_ASSISTANT_NAME",
+        "AI_ASSISTANT_MODEL",
+        "AI_AUTOREPLY",
+        "OPENAI_ORG_ID",
+        "OPENAI_PROJECT",
+    }
 	filtered_env = {k: env.get(k) for k in sorted(visible_keys)}
 
 	return {
 		"env": filtered_env,
-		"session_mode": get_session_mode(),
+        "session_mode": "openai_threads",
 		"assistant_id": assistant_id,
 		"assistant_id_file": assistant_id_file,
 		"assistant_id_file_exists": _exists(assistant_id_file),

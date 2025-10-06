@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Union
 from agents import Agent, Runner
 
 from .bootstrap import initialize
-from .config import get_default_model, get_session_mode, get_openai_assistant_id
+from .config import get_openai_assistant_id
 from .registry import get_agent as _get_registered_agent
 
 
@@ -46,27 +46,10 @@ def run_agent(
 	model: Optional[str] = None,
 	**runner_kwargs: Any,
 ) -> Dict[str, Any]:
-	"""Run an agent until final output and return a dict with output and metadata.
-
-	In openai_threads mode, we route to OpenAI Assistants Threads and return the last assistant message.
-	Otherwise, we use the Agents SDK loop and (now-disabled) local session memory.
-	"""
+    """Run an agent via OpenAI Assistants Threads and return output and metadata."""
 	initialize()
-	mode = get_session_mode()
-	if mode == "openai_threads":
-		out = _run_via_openai_threads(input_text, session_id)
-		return {**out, "agent_name": (agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name))}
-
-	resolved_model = model or get_default_model()
-	agent = _resolve_agent(agent_or_name, resolved_model)
-	# Local session disabled; run without persistence
-	result = Runner.run_sync(agent, input_text, session=None, **runner_kwargs)
-	return {
-		"final_output": result.final_output,
-		"usage": getattr(result, "usage", None),
-		"agent_name": agent.name,
-		"model": resolved_model,
-	}
+    out = _run_via_openai_threads(input_text, session_id)
+    return {**out, "agent_name": (agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name))}
 
 
 def run_agent_sync(

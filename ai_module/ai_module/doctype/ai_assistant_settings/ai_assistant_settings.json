@@ -49,10 +49,11 @@
 		},
 		{
 			"fieldname": "base_url",
-			"label": "Base URL",
+			"label": "Base URL (removed)",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "OpenAI compatible base URL (from env/conf)"
+			"hidden": 1,
+			"description": "Deprecated"
 		},
 		{
 			"fieldname": "api_key_present",
@@ -63,31 +64,34 @@
 		},
 		{
 			"fieldname": "assistant_id",
-			"label": "Assistant ID (effective)",
+			"label": "Assistant ID",
 			"fieldtype": "Data",
-			"read_only": 1,
-			"description": "Assistant id resolved from env or persisted file"
+			"read_only": 0,
+			"description": "Optional override. If set, this id will be used for OpenAI Threads."
 		},
 		{
 			"fieldname": "default_model",
-			"label": "Default Model",
+			"label": "Default Model (removed)",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "Default model for local agent mode (AI_DEFAULT_MODEL)"
+			"hidden": 1,
+			"description": "Deprecated"
 		},
 		{
 			"fieldname": "session_mode",
-			"label": "Session Mode",
+			"label": "Session Mode (removed)",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "AI session mode (AI_SESSION_MODE)"
+			"hidden": 1,
+			"description": "Deprecated"
 		},
 		{
 			"fieldname": "session_db",
-			"label": "Session DB Path",
+			"label": "Session DB Path (removed)",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "SQLite path for session memory if configured"
+			"hidden": 1,
+			"description": "Deprecated"
 		},
 		{
 			"fieldname": "section_prompt",

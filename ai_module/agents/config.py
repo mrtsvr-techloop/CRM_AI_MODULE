@@ -39,64 +39,32 @@ def get_environment() -> Dict[str, str]:
 
 
 def apply_environment() -> None:
-	"""Apply relevant environment variables for the Agents SDK and providers.
+    """Apply minimal OpenAI environment variables.
 
-	Sets well-known keys into os.environ so underlying SDKs pick them up.
-	Supported keys (set these in Frappe Cloud):
-	- OPENAI_API_KEY
-	- OPENAI_BASE_URL (optional, for Azure/OpenAI-compatible endpoints)
-	- OPENAI_ORG_ID (optional)
-	- OPENAI_PROJECT (optional)
-	- AI_DEFAULT_MODEL (optional)
-	- AI_SESSION_DB (optional, SQLite path for session memory)
-	- AI_SESSION_MODE (optional: "local" or "openai_threads")
-	- AI_OPENAI_ASSISTANT_ID (required when AI_SESSION_MODE=openai_threads)
-	- AI_ASSISTANT_NAME (optional)
-	- AI_ASSISTANT_INSTRUCTIONS (optional)
-	- AI_ASSISTANT_MODEL (optional)
-	"""
-	env = get_environment()
-	for key in (
-		"OPENAI_API_KEY",
-		"OPENAI_BASE_URL",
-		"OPENAI_ORG_ID",
-		"OPENAI_PROJECT",
-	):
-		val = env.get(key)
-		if val:
-			os.environ[key] = val
+    Only sets keys required for OpenAI Threads usage.
+    Supported keys:
+    - OPENAI_API_KEY (required)
+    - OPENAI_ORG_ID (optional)
+    - OPENAI_PROJECT (optional)
+    """
+    env = get_environment()
+    for key in (
+        "OPENAI_API_KEY",
+        "OPENAI_ORG_ID",
+        "OPENAI_PROJECT",
+    ):
+        val = env.get(key)
+        if val:
+            os.environ[key] = val
 
 
-def get_default_model() -> str:
-	"""Return default model name, override via AI_DEFAULT_MODEL env.
-
-	Used only for local SDK mode. Threads mode relies on AI_ASSISTANT_MODEL.
-	"""
-	env = get_environment()
-	return env.get("AI_DEFAULT_MODEL", "gpt-4o-mini")
+ # Removed: local default model handling; Threads uses AI_ASSISTANT_MODEL
 
 
-def get_session_db_path() -> Optional[str]:
-	"""Return SQLite file path for session memory, or None to disable persistence.
-
-	Priority:
-	1) AI_SESSION_DB in env
-	2) sites/<site>/private/files/ai_sessions.db (if path is resolvable)
-	"""
-	env = get_environment()
-	if env.get("AI_SESSION_DB"):
-		return env["AI_SESSION_DB"]
-	try:
-		# Ensure we place the DB under the site's private files
-		return frappe.utils.get_site_path("private", "files", "ai_sessions.db")
-	except Exception:
-		return None
+ # Removed: session DB path; not used when forcing OpenAI Threads
 
 
-def get_session_mode() -> str:
-	"""Return session mode: "openai_threads" (default) or "local" for SDK-managed memory."""
-	mode = get_environment().get("AI_SESSION_MODE", "openai_threads").strip().lower()
-	return mode
+ # Removed: session mode; we always use OpenAI Threads
 
 
 def _assistant_id_file_path() -> Optional[str]:
@@ -137,16 +105,23 @@ def _get_persisted_assistant_id() -> Optional[str]:
 
 
 def get_openai_assistant_id() -> Optional[str]:
-	"""Assistant ID to use for Assistants Threads mode.
+    """Assistant ID resolution order:
 
-	Resolution order:
-	1) AI_OPENAI_ASSISTANT_ID from environment
-	2) persisted file under private/files
-	"""
-	env_val = get_environment().get("AI_OPENAI_ASSISTANT_ID")
-	if env_val:
-		return env_val
-	return _get_persisted_assistant_id()
+    1) DocType field (AI Assistant Settings.assistant_id) if set
+    2) AI_OPENAI_ASSISTANT_ID from environment
+    3) persisted file under private/files
+    """
+    try:
+        doc = frappe.get_single("AI Assistant Settings")
+        dt_val = (getattr(doc, "assistant_id", None) or "").strip()
+        if dt_val:
+            return dt_val
+    except Exception:
+        pass
+    env_val = get_environment().get("AI_OPENAI_ASSISTANT_ID")
+    if env_val:
+        return env_val
+    return _get_persisted_assistant_id()
 
 
 def get_settings_prompt_only() -> Optional[str]:
@@ -164,14 +139,13 @@ def get_settings_prompt_only() -> Optional[str]:
 
 
 def get_env_assistant_spec() -> Optional[Dict[str, str]]:
-	"""Return Assistant spec strictly from environment variables if fully provided.
+    """Return name/model for Assistant strictly from env when both are present.
 
-	No exceptions are raised; returns None when any required piece is missing.
-	"""
-	env = get_environment()
-	name = env.get("AI_ASSISTANT_NAME")
-	instructions = env.get("AI_ASSISTANT_INSTRUCTIONS")
-	model = env.get("AI_ASSISTANT_MODEL")
-	if not (name and instructions and model):
-		return None
-	return {"name": name, "instructions": instructions, "model": model} 
+    Instructions are no longer read from env; the prompt comes from DocType.
+    """
+    env = get_environment()
+    name = env.get("AI_ASSISTANT_NAME")
+    model = env.get("AI_ASSISTANT_MODEL")
+    if not (name and model):
+        return None
+    return {"name": name, "model": model}

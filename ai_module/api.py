@@ -169,7 +169,10 @@ def ai_set_instructions(instructions: str) -> str:
 	dt = "AI Assistant Settings"
 	if not frappe.db.exists("DocType", dt):
 		raise frappe.DoesNotExistError("AI Assistant Settings doctype is not installed")
-	# Update value
+	# Update value only if DocType override is enabled
+	doc = frappe.get_single(dt)
+	if not getattr(doc, "use_settings_override", 0):
+		return ""
 	frappe.db.set_value(dt, dt, "instructions", instructions)
 	frappe.db.commit()
 	# Upsert Assistant

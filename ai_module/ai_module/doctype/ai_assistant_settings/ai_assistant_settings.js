@@ -43,5 +43,16 @@ frappe.ui.form.on('AI Assistant Settings', {
         },
       });
     });
+
+    // Toggle fields' editability based on override flag
+    const toggleEditable = () => {
+      const enabled = frm.doc.use_settings_override ? 1 : 0;
+      frm.set_df_property('assistant_id', 'read_only', enabled ? 0 : 1);
+      frm.set_df_property('instructions', 'read_only', enabled ? 0 : 1);
+      frm.refresh_field('assistant_id');
+      frm.refresh_field('instructions');
+    };
+    toggleEditable();
+    frm.fields_dict.use_settings_override && frm.fields_dict.use_settings_override.df && frm.fields_dict.use_settings_override.$input && frm.fields_dict.use_settings_override.$input.on('change', toggleEditable);
   },
 }); 

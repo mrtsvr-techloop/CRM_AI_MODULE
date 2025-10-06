@@ -15,6 +15,13 @@
 	"title_field": "instructions",
 	"fields": [
 		{
+			"fieldname": "use_settings_override",
+			"label": "Use this DocType for configuration",
+			"fieldtype": "Check",
+			"default": 0,
+			"description": "When enabled, values saved here override environment"
+		},
+		{
 			"fieldname": "assistant_name",
 			"label": "Assistant Name",
 			"fieldtype": "Data",

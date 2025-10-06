@@ -105,32 +105,36 @@ def _get_persisted_assistant_id() -> Optional[str]:
 
 
 def get_openai_assistant_id() -> Optional[str]:
-    """Assistant ID resolution order:
+	"""Assistant ID resolution with Doctype override flag.
 
-    1) DocType field (AI Assistant Settings.assistant_id) if set
-    2) AI_OPENAI_ASSISTANT_ID from environment
-    3) persisted file under private/files
-    """
-    try:
-        doc = frappe.get_single("AI Assistant Settings")
-        dt_val = (getattr(doc, "assistant_id", None) or "").strip()
-        if dt_val:
-            return dt_val
-    except Exception:
-        pass
-    env_val = get_environment().get("AI_OPENAI_ASSISTANT_ID")
-    if env_val:
-        return env_val
-    return _get_persisted_assistant_id()
-
-
-def get_settings_prompt_only() -> Optional[str]:
-	"""Return plain-text prompt/instructions from the Doctype only.
-
-	Uses AI Assistant Settings.instructions, strips HTML, returns None if empty.
+	Order of precedence:
+	1) If DocType flag `use_settings_override` is enabled AND assistant_id is set, use it
+	2) AI_OPENAI_ASSISTANT_ID from environment
+	3) persisted file under private/files
 	"""
 	try:
 		doc = frappe.get_single("AI Assistant Settings")
+		if getattr(doc, "use_settings_override", 0):
+			dt_val = (getattr(doc, "assistant_id", None) or "").strip()
+			if dt_val:
+				return dt_val
+	except Exception:
+		pass
+	env_val = get_environment().get("AI_OPENAI_ASSISTANT_ID")
+	if env_val:
+		return env_val
+	return _get_persisted_assistant_id()
+
+
+def get_settings_prompt_only() -> Optional[str]:
+	"""Return plain-text prompt/instructions from the DocType when allowed by flag.
+
+	When `use_settings_override` is disabled, returns None so that env takes precedence.
+	"""
+	try:
+		doc = frappe.get_single("AI Assistant Settings")
+		if not getattr(doc, "use_settings_override", 0):
+			return None
 		instr_html = doc.instructions or ""
 		instr = clean_html(instr_html).strip()
 		return instr or None
@@ -139,13 +143,28 @@ def get_settings_prompt_only() -> Optional[str]:
 
 
 def get_env_assistant_spec() -> Optional[Dict[str, str]]:
-    """Return name/model for Assistant strictly from env when both are present.
+	"""Return name/model/instructions from env when DocType override is disabled.
 
-    Instructions are no longer read from env; the prompt comes from DocType.
-    """
-    env = get_environment()
-    name = env.get("AI_ASSISTANT_NAME")
-    model = env.get("AI_ASSISTANT_MODEL")
-    if not (name and model):
-        return None
-    return {"name": name, "model": model}
+	- If DocType flag is ON, we consider only DocType values (env ignored for these).
+	- If flag is OFF, use env for name/model and optionally instructions via AI_INSTRUCTIONS.
+	"""
+	env = get_environment()
+	try:
+		doc = frappe.get_single("AI Assistant Settings")
+		if getattr(doc, "use_settings_override", 0):
+			return None
+	except Exception:
+		pass
+	name = env.get("AI_ASSISTANT_NAME")
+	model = env.get("AI_ASSISTANT_MODEL")
+	instr = (env.get("AI_INSTRUCTIONS") or env.get("AI_ASSISTANT_INSTRUCTIONS") or "").strip()
+	if name or model or instr:
+		data: Dict[str, str] = {}
+		if name:
+			data["name"] = name
+		if model:
+			data["model"] = model
+		if instr:
+			data["instructions"] = instr
+		return data
+	return None

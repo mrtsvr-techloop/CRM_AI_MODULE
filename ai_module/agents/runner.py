@@ -46,10 +46,10 @@ def run_agent(
 	model: Optional[str] = None,
 	**runner_kwargs: Any,
 ) -> Dict[str, Any]:
-    """Run an agent via OpenAI Assistants Threads and return output and metadata."""
+	"""Run an agent via OpenAI Assistants Threads and return output and metadata."""
 	initialize()
-    out = _run_via_openai_threads(input_text, session_id)
-    return {**out, "agent_name": (agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name))}
+	out = _run_via_openai_threads(input_text, session_id)
+	return {**out, "agent_name": (agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name))}
 
 
 def run_agent_sync(

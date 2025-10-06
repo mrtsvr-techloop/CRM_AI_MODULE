@@ -138,9 +138,9 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			"attach": payload.get("attach"),
 		}
 
-    # Always use OpenAI Threads: persist a thread per phone number
-    phone = (payload.get("from") or "").strip()
-    session_id = _get_or_create_thread_for_phone(phone)
+		# Always use OpenAI Threads: persist a thread per phone number
+		phone = (payload.get("from") or "").strip()
+		session_id = _get_or_create_thread_for_phone(phone)
 
 		# Import AI runtime directly; no HTTP
 		from ai_module import api as ai_api

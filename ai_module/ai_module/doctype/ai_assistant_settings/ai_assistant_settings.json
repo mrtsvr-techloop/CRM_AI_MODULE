@@ -55,6 +55,41 @@
 			"description": "OpenAI compatible base URL (from env/conf)"
 		},
 		{
+			"fieldname": "api_key_present",
+			"label": "OPENAI_API_KEY Present",
+			"fieldtype": "Check",
+			"read_only": 1,
+			"description": "Indicates whether an API key is set in the environment"
+		},
+		{
+			"fieldname": "assistant_id",
+			"label": "Assistant ID (effective)",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "Assistant id resolved from env or persisted file"
+		},
+		{
+			"fieldname": "default_model",
+			"label": "Default Model",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "Default model for local agent mode (AI_DEFAULT_MODEL)"
+		},
+		{
+			"fieldname": "session_mode",
+			"label": "Session Mode",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "AI session mode (AI_SESSION_MODE)"
+		},
+		{
+			"fieldname": "session_db",
+			"label": "Session DB Path",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"description": "SQLite path for session memory if configured"
+		},
+		{
 			"fieldname": "section_prompt",
 			"label": "Prompt",
 			"fieldtype": "Section Break"
@@ -63,7 +98,7 @@
 			"fieldname": "instructions",
 			"label": "Instructions",
 			"fieldtype": "Text Editor",
-			"reqd": 1,
+			"reqd": 0,
 			"description": "System prompt used for the OpenAI Assistant"
 		}
 	],

@@ -3,7 +3,13 @@ from __future__ import annotations
 import frappe
 from frappe.model.document import Document
 
-from ai_module.agents.config import get_environment
+from ai_module.agents.config import (
+    get_environment,
+    get_openai_assistant_id,
+    get_default_model,
+    get_session_mode,
+    get_session_db_path,
+)
 
 
 class AIAssistantSettings(Document):
@@ -19,12 +25,16 @@ class AIAssistantSettings(Document):
 		self.project = conf.get("OPENAI_PROJECT") or env.get("OPENAI_PROJECT") or ""
 		self.org_id = conf.get("OPENAI_ORG_ID") or env.get("OPENAI_ORG_ID") or ""
 		self.base_url = conf.get("OPENAI_BASE_URL") or env.get("OPENAI_BASE_URL") or ""
+		# Additional env-derived display fields
+		self.api_key_present = 1 if (conf.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")) else 0
+		self.assistant_id = get_openai_assistant_id() or ""
+		self.default_model = get_default_model() or ""
+		self.session_mode = get_session_mode() or ""
+		self.session_db = get_session_db_path() or ""
 
 	def validate(self):
-		# Ensure non-empty instructions
+		# Normalize instructions but do not hard-fail during install/first run
 		self.instructions = (self.instructions or "").strip()
-		if not self.instructions:
-			raise frappe.ValidationError("Instructions cannot be empty")
 		# Always refresh read-only display fields before save
 		self._populate_readonly_from_env()
 
@@ -33,7 +43,13 @@ class AIAssistantSettings(Document):
 		self._populate_readonly_from_env()
 
 	def on_update(self):
-		# Upsert the Assistant whenever settings are saved
+		# Upsert the Assistant whenever settings are saved, but skip during install
+		# or when provider credentials are not configured to avoid bricking install.
+		if getattr(frappe.flags, "in_install", False):
+			return
+		env = get_environment()
+		if not env.get("OPENAI_API_KEY"):
+			return
 		from ai_module.agents.assistant_update import upsert_assistant
 		upsert_assistant(force=True)
 

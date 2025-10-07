@@ -1,8 +1,8 @@
 frappe.ui.form.on('AI Assistant Settings', {
   refresh(frm) {
     const toggle_editability = () => {
-      const use = !!frm.doc.use_settings;
-      const fields = ['assistant_name', 'model', 'project', 'org_id', 'base_url', 'api_key'];
+      const use = !!frm.doc.use_settings_override;
+      const fields = ['assistant_name', 'model', 'project', 'org_id', 'api_key'];
       fields.forEach((f) => frm.set_df_property(f, 'read_only', use ? 0 : 1));
     };
 
@@ -57,16 +57,11 @@ frappe.ui.form.on('AI Assistant Settings', {
       const enabled = frm.doc.use_settings_override ? 1 : 0;
       frm.set_df_property('assistant_id', 'read_only', enabled ? 0 : 1);
       frm.set_df_property('instructions', 'read_only', enabled ? 0 : 1);
+      toggle_editability();
       frm.refresh_field('assistant_id');
       frm.refresh_field('instructions');
     };
     toggleEditable();
     frm.fields_dict.use_settings_override && frm.fields_dict.use_settings_override.df && frm.fields_dict.use_settings_override.$input && frm.fields_dict.use_settings_override.$input.on('change', toggleEditable);
-  },
-  use_settings(frm) {
-    // When toggled, flip read-only of fields
-    const use = !!frm.doc.use_settings;
-    const fields = ['assistant_name', 'model', 'project', 'org_id', 'base_url', 'api_key'];
-    fields.forEach((f) => frm.set_df_property(f, 'read_only', use ? 0 : 1));
   },
 }); 

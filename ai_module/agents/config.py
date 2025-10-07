@@ -40,7 +40,7 @@ def get_environment() -> Dict[str, str]:
 	try:
 		# Import inside function to avoid circular imports at module load
 		doc = frappe.get_single("AI Assistant Settings")
-		use_settings = bool(getattr(doc, "use_settings", 0))
+		use_settings = bool(getattr(doc, "use_settings_override", 0))
 		if use_settings:
 			overrides: Dict[str, str] = {}
 			# Securely read password field

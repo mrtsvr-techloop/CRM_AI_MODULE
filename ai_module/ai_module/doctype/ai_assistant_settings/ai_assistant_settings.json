@@ -34,13 +34,6 @@
 			"fieldtype": "Section Break"
 		},
 		{
-			"fieldname": "use_settings",
-			"label": "Use this DocType for configuration",
-			"fieldtype": "Check",
-			"default": 0,
-			"description": "When enabled, the fields below (including API key) override environment variables."
-		},
-		{
 			"fieldname": "model",
 			"label": "Model",
 			"fieldtype": "Data",

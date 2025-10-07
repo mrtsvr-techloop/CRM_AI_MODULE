@@ -12,9 +12,9 @@ from ai_module.agents.config import (
 class AIAssistantSettings(Document):
 	def _populate_readonly_from_env(self):
 		"""Populate display fields from environment unless user chose to use DocType.
-		When `use_settings` is enabled, fields remain as user-entered and editable.
+		When `use_settings_override` is enabled, fields remain as user-entered and editable.
 		"""
-		use_settings = bool(getattr(self, "use_settings", 0))
+		use_settings = bool(getattr(self, "use_settings_override", 0))
 		if use_settings:
 			return
 		env = get_environment()
@@ -36,7 +36,7 @@ class AIAssistantSettings(Document):
 		if not self.instructions:
 			raise frappe.ValidationError("Instructions cannot be empty")
 		# When user opts-in to DocType configuration, require an API key
-		if getattr(self, "use_settings", 0):
+		if getattr(self, "use_settings_override", 0):
 			api_key = (self.api_key or "").strip()
 			if not api_key:
 				raise frappe.ValidationError("OpenAI API Key is required when using DocType configuration")

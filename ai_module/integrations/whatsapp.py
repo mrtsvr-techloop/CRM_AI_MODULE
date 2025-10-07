@@ -1,7 +1,7 @@
 import frappe
 from typing import Any, Dict
 from openai import OpenAI
-from ai_module.agents.config import get_environment, get_session_mode
+from ai_module.agents.config import get_environment
 
 
 def _is_incoming_message(doc) -> bool:
@@ -138,15 +138,9 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			"attach": payload.get("attach"),
 		}
 
-		# Determine persistent session id strategy
+		# Always use OpenAI Threads: persist a thread per phone number
 		phone = (payload.get("from") or "").strip()
-		mode = get_session_mode()
-		if mode == "openai_threads":
-			# Persist thread per phone number
-			session_id = _get_or_create_thread_for_phone(phone)
-		else:
-			# For local sessions, using phone as session id maintains continuity
-			session_id = f"whatsapp:{phone}" if phone else None
+		session_id = _get_or_create_thread_for_phone(phone)
 
 		# Import AI runtime directly; no HTTP
 		from ai_module import api as ai_api

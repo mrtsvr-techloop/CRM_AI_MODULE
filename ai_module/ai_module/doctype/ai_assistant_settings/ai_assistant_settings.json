@@ -15,6 +15,13 @@
 	"title_field": "instructions",
 	"fields": [
 		{
+			"fieldname": "use_settings_override",
+			"label": "Use this DocType for configuration",
+			"fieldtype": "Check",
+			"default": 0,
+			"description": "When enabled, values saved here override environment"
+		},
+		{
 			"fieldname": "assistant_name",
 			"label": "Assistant Name",
 			"fieldtype": "Data",
@@ -56,10 +63,49 @@
 		},
 		{
 			"fieldname": "base_url",
-			"label": "Base URL",
+			"label": "Base URL (removed)",
 			"fieldtype": "Data",
 			"read_only": 1,
-			"description": "OpenAI compatible base URL (from env/conf)"
+			"hidden": 1,
+			"description": "Deprecated"
+		},
+		{
+			"fieldname": "api_key_present",
+			"label": "OPENAI_API_KEY Present",
+			"fieldtype": "Check",
+			"read_only": 1,
+			"description": "Indicates whether an API key is set in the environment"
+		},
+		{
+			"fieldname": "assistant_id",
+			"label": "Assistant ID",
+			"fieldtype": "Data",
+			"read_only": 0,
+			"description": "Optional override. If set, this id will be used for OpenAI Threads."
+		},
+		{
+			"fieldname": "default_model",
+			"label": "Default Model (removed)",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"hidden": 1,
+			"description": "Deprecated"
+		},
+		{
+			"fieldname": "session_mode",
+			"label": "Session Mode (removed)",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"hidden": 1,
+			"description": "Deprecated"
+		},
+		{
+			"fieldname": "session_db",
+			"label": "Session DB Path (removed)",
+			"fieldtype": "Data",
+			"read_only": 1,
+			"hidden": 1,
+			"description": "Deprecated"
 		},
 		{
 			"fieldname": "api_key",
@@ -77,7 +123,7 @@
 			"fieldname": "instructions",
 			"label": "Instructions",
 			"fieldtype": "Text Editor",
-			"reqd": 1,
+			"reqd": 0,
 			"description": "System prompt used for the OpenAI Assistant"
 		}
 	],

@@ -3,7 +3,10 @@ from __future__ import annotations
 import frappe
 from frappe.model.document import Document
 
-from ai_module.agents.config import get_environment
+from ai_module.agents.config import (
+	get_environment,
+	get_openai_assistant_id,
+)
 
 
 class AIAssistantSettings(Document):
@@ -20,10 +23,15 @@ class AIAssistantSettings(Document):
 		self.model = conf.get("AI_ASSISTANT_MODEL") or env.get("AI_ASSISTANT_MODEL") or ""
 		self.project = conf.get("OPENAI_PROJECT") or env.get("OPENAI_PROJECT") or ""
 		self.org_id = conf.get("OPENAI_ORG_ID") or env.get("OPENAI_ORG_ID") or ""
-		self.base_url = conf.get("OPENAI_BASE_URL") or env.get("OPENAI_BASE_URL") or ""
+		# Additional env-derived display fields
+		self.api_key_present = 1 if (conf.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")) else 0
+		# Do not override user-entered assistant_id; only fill if empty
+		if not (self.assistant_id or "").strip():
+			self.assistant_id = get_openai_assistant_id() or ""
+		# Removed fields are no longer populated
 
 	def validate(self):
-		# Ensure non-empty instructions
+		# Normalize instructions but do not hard-fail during install/first run
 		self.instructions = (self.instructions or "").strip()
 		if not self.instructions:
 			raise frappe.ValidationError("Instructions cannot be empty")
@@ -33,6 +41,7 @@ class AIAssistantSettings(Document):
 			if not api_key:
 				raise frappe.ValidationError("OpenAI API Key is required when using DocType configuration")
 		# Refresh display fields from env only if not using settings
+		# Always refresh read-only display fields before save
 		self._populate_readonly_from_env()
 
 	def onload(self):
@@ -40,7 +49,16 @@ class AIAssistantSettings(Document):
 		self._populate_readonly_from_env()
 
 	def on_update(self):
-		# Upsert the Assistant whenever settings are saved
+		# Upsert the Assistant whenever settings are saved, but skip during install
+		# or when provider credentials are not configured to avoid bricking install.
+		if getattr(frappe.flags, "in_install", False):
+			return
+		env = get_environment()
+		if not env.get("OPENAI_API_KEY"):
+			return
+		# Only trigger an update if user opted into using settings as source
+		if not getattr(self, "use_settings_override", 0):
+			return
 		from ai_module.agents.assistant_update import upsert_assistant
 		upsert_assistant(force=True)
 

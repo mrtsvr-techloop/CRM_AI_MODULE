@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import frappe
 
 from .agents import Agent, register_agent, register_tool, list_agents, list_tools, run_agent
-from .agents.config import apply_environment, get_environment, get_session_mode, get_openai_assistant_id, _assistant_id_file_path
+from .agents.config import apply_environment, get_environment, get_openai_assistant_id, _assistant_id_file_path
 
 
 @frappe.whitelist(methods=["GET"])
@@ -31,12 +31,10 @@ def ai_debug_env() -> Dict[str, Any]:
 	# Only expose relevant keys; do not echo secrets back
 	visible_keys = {
 		"AI_AGENT_NAME",
-		"AI_SESSION_MODE",
 		"AI_OPENAI_ASSISTANT_ID",
 		"AI_ASSISTANT_NAME",
 		"AI_ASSISTANT_MODEL",
 		"AI_AUTOREPLY",
-		"OPENAI_BASE_URL",
 		"OPENAI_ORG_ID",
 		"OPENAI_PROJECT",
 	}
@@ -44,7 +42,7 @@ def ai_debug_env() -> Dict[str, Any]:
 
 	return {
 		"env": filtered_env,
-		"session_mode": get_session_mode(),
+		"session_mode": "openai_threads",
 		"assistant_id": assistant_id,
 		"assistant_id_file": assistant_id_file,
 		"assistant_id_file_exists": _exists(assistant_id_file),
@@ -171,7 +169,10 @@ def ai_set_instructions(instructions: str) -> str:
 	dt = "AI Assistant Settings"
 	if not frappe.db.exists("DocType", dt):
 		raise frappe.DoesNotExistError("AI Assistant Settings doctype is not installed")
-	# Update value
+	# Update value only if DocType override is enabled
+	doc = frappe.get_single(dt)
+	if not getattr(doc, "use_settings_override", 0):
+		return ""
 	frappe.db.set_value(dt, dt, "instructions", instructions)
 	frappe.db.commit()
 	# Upsert Assistant

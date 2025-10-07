@@ -31,17 +31,10 @@ class AIAssistantSettings(Document):
 		# Removed fields are no longer populated
 
 	def validate(self):
-		# Normalize instructions but do not hard-fail during install/first run
+		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()
-		if not self.instructions:
-			raise frappe.ValidationError("Instructions cannot be empty")
-		# When user opts-in to DocType configuration, require an API key
-		if getattr(self, "use_settings_override", 0):
-			api_key = (self.api_key or "").strip()
-			if not api_key:
-				raise frappe.ValidationError("OpenAI API Key is required when using DocType configuration")
-		# Refresh display fields from env only if not using settings
-		# Always refresh read-only display fields before save
+		# Do not enforce API key at save time; runtime will skip actions if missing
+		# Always refresh display fields before save (no-op if override is on)
 		self._populate_readonly_from_env()
 
 	def onload(self):

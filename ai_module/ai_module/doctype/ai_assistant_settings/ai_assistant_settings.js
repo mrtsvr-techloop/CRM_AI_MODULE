@@ -1,5 +1,13 @@
 frappe.ui.form.on('AI Assistant Settings', {
   refresh(frm) {
+    const toggle_editability = () => {
+      const use = !!frm.doc.use_settings;
+      const fields = ['assistant_name', 'model', 'project', 'org_id', 'base_url', 'api_key'];
+      fields.forEach((f) => frm.set_df_property(f, 'read_only', use ? 0 : 1));
+    };
+
+    toggle_editability();
+
     // Debug Environment
     frm.add_custom_button(__('Debug Environment'), () => {
       frappe.call({
@@ -43,5 +51,11 @@ frappe.ui.form.on('AI Assistant Settings', {
         },
       });
     });
+  },
+  use_settings(frm) {
+    // When toggled, flip read-only of fields
+    const use = !!frm.doc.use_settings;
+    const fields = ['assistant_name', 'model', 'project', 'org_id', 'base_url', 'api_key'];
+    fields.forEach((f) => frm.set_df_property(f, 'read_only', use ? 0 : 1));
   },
 }); 

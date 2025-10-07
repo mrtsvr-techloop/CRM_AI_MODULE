@@ -35,6 +35,46 @@ def get_environment() -> Dict[str, str]:
 	merged: Dict[str, str] = {}
 	merged.update(os.environ)
 	merged.update(_get_frappe_environment())
+
+	# Overlay from DocType when user opted-in to use settings
+	try:
+		# Import inside function to avoid circular imports at module load
+		doc = frappe.get_single("AI Assistant Settings")
+		use_settings = bool(getattr(doc, "use_settings", 0))
+		if use_settings:
+			overrides: Dict[str, str] = {}
+			# Securely read password field
+			try:
+				from frappe.utils.password import get_decrypted_password
+				api_key = (
+					get_decrypted_password(
+						"AI Assistant Settings",
+						"AI Assistant Settings",
+						"api_key",
+						raise_exception=False,
+					)
+					or ""
+				).strip()
+				if api_key:
+					overrides["OPENAI_API_KEY"] = api_key
+			except Exception:
+				pass
+			# Optional provider configuration
+			for key, val in (
+				("OPENAI_BASE_URL", getattr(doc, "base_url", "")),
+				("OPENAI_ORG_ID", getattr(doc, "org_id", "")),
+				("OPENAI_PROJECT", getattr(doc, "project", "")),
+				("AI_ASSISTANT_NAME", getattr(doc, "assistant_name", "")),
+				("AI_ASSISTANT_MODEL", getattr(doc, "model", "")),
+			):
+				val_str = (val or "").strip()
+				if val_str:
+					overrides[key] = val_str
+			merged.update(overrides)
+	except Exception:
+		# Ignore if DocType not installed or not accessible in this context
+		pass
+
 	return merged
 
 

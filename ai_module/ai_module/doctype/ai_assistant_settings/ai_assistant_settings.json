@@ -27,6 +27,13 @@
 			"fieldtype": "Section Break"
 		},
 		{
+			"fieldname": "use_settings",
+			"label": "Use this DocType for configuration",
+			"fieldtype": "Check",
+			"default": 0,
+			"description": "When enabled, the fields below (including API key) override environment variables."
+		},
+		{
 			"fieldname": "model",
 			"label": "Model",
 			"fieldtype": "Data",
@@ -53,6 +60,13 @@
 			"fieldtype": "Data",
 			"read_only": 1,
 			"description": "OpenAI compatible base URL (from env/conf)"
+		},
+		{
+			"fieldname": "api_key",
+			"label": "OpenAI API Key",
+			"fieldtype": "Password",
+			"read_only": 1,
+			"description": "Stored securely. Used only when 'Use this DocType for configuration' is enabled."
 		},
 		{
 			"fieldname": "section_prompt",

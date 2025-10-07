@@ -8,11 +8,13 @@ from ai_module.agents.config import get_environment
 
 class AIAssistantSettings(Document):
 	def _populate_readonly_from_env(self):
-		"""Populate read-only display fields from Frappe Cloud env (frappe.conf.environment) or os.environ.
-		These fields are for display only and not used as inputs (prompt comes from instructions).
+		"""Populate display fields from environment unless user chose to use DocType.
+		When `use_settings` is enabled, fields remain as user-entered and editable.
 		"""
+		use_settings = bool(getattr(self, "use_settings", 0))
+		if use_settings:
+			return
 		env = get_environment()
-		# Prefer frappe.conf.get('AI_ASSISTANT_*') if present
 		conf = frappe.conf or {}
 		self.assistant_name = conf.get("AI_ASSISTANT_NAME") or env.get("AI_ASSISTANT_NAME") or ""
 		self.model = conf.get("AI_ASSISTANT_MODEL") or env.get("AI_ASSISTANT_MODEL") or ""
@@ -25,11 +27,16 @@ class AIAssistantSettings(Document):
 		self.instructions = (self.instructions or "").strip()
 		if not self.instructions:
 			raise frappe.ValidationError("Instructions cannot be empty")
-		# Always refresh read-only display fields before save
+		# When user opts-in to DocType configuration, require an API key
+		if getattr(self, "use_settings", 0):
+			api_key = (self.api_key or "").strip()
+			if not api_key:
+				raise frappe.ValidationError("OpenAI API Key is required when using DocType configuration")
+		# Refresh display fields from env only if not using settings
 		self._populate_readonly_from_env()
 
 	def onload(self):
-		# Populate read-only fields when form loads
+		# Populate display fields when form loads (no override when using settings)
 		self._populate_readonly_from_env()
 
 	def on_update(self):

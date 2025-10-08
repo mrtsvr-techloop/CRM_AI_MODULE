@@ -12,7 +12,8 @@ from .config import (
 	get_env_assistant_spec,
 	get_environment,
 )
-from .assistant_spec import get_instructions, get_assistant_tools
+from .assistant_update import get_current_instructions
+from .assistant_spec import get_assistant_tools
 
 
 def ensure_openai_assistant() -> Optional[str]:
@@ -32,13 +33,29 @@ def ensure_openai_assistant() -> Optional[str]:
 		return None
 
 	client = OpenAI()
-	spec_env = get_env_assistant_spec()  # requires name + model from env
-	instructions = get_instructions()
+	# Determine source of name/model based on override flag
+	name = None
+	model = None
+	try:
+		doc = frappe.get_single("AI Assistant Settings")
+		if getattr(doc, "use_settings_override", 0):
+			name = (getattr(doc, "assistant_name", None) or "").strip() or None
+			model = (getattr(doc, "model", None) or "").strip() or None
+		spec_env = get_env_assistant_spec() or {}
+		name = name or spec_env.get("name") or frappe.conf.get("AI_ASSISTANT_NAME") or "AI Assistant"
+		model = model or spec_env.get("model") or frappe.conf.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
+	except Exception:
+		# Fallback if DocType not available
+		spec_env = get_env_assistant_spec() or {}
+		name = spec_env.get("name") or frappe.conf.get("AI_ASSISTANT_NAME") or "AI Assistant"
+		model = spec_env.get("model") or frappe.conf.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
+
+	instructions = get_current_instructions()
 	tools = get_assistant_tools() or None
 	assistant = client.beta.assistants.create(
-		name=spec_env.get("name"),
+		name=name,
 		instructions=instructions,
-		model=spec_env.get("model"),
+		model=model,
 		tools=tools,
 	)
 	set_persisted_assistant_id(assistant.id)

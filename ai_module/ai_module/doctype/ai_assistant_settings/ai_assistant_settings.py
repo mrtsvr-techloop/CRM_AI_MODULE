@@ -56,7 +56,7 @@ class AIAssistantSettings(Document):
 		upsert_assistant(force=True)
 
 
-@frappe.whitelist(methods=["GET"])
+@frappe.whitelist(methods=["GET", "POST"])
 def ai_assistant_debug_env() -> dict:
 	"""Expose the same info as ai_debug_env for this DocType UI."""
 	from ai_module.api import ai_debug_env

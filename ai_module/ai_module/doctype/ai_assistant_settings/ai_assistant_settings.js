@@ -12,6 +12,7 @@ frappe.ui.form.on('AI Assistant Settings', {
     frm.add_custom_button(__('Debug Environment'), () => {
       frappe.call({
         method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_debug_env',
+        type: 'GET',
         callback(r) {
           const data = r.message || {};
           const pretty = JSON.stringify(data, null, 2);

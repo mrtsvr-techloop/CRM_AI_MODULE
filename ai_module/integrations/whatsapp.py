@@ -98,6 +98,11 @@ def on_whatsapp_after_insert(doc, method=None):
 			return
 
 		payload = _build_payload(doc)
+		# Trace enqueue intent.
+		try:
+			frappe.logger().info(f"[ai_module] enqueue whatsapp job for {doc.name} payload keys={list(payload.keys())}")
+		except Exception:
+			pass
 
 		# Enqueue lightweight job so we don't slow down insert path
 		frappe.enqueue(
@@ -141,6 +146,10 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		# Always use OpenAI Threads: persist a thread per phone number
 		phone = (payload.get("from") or "").strip()
 		session_id = _get_or_create_thread_for_phone(phone)
+		try:
+			frappe.logger().info(f"[ai_module] whatsapp session resolved phone={phone} thread={session_id}")
+		except Exception:
+			pass
 
 		# Import AI runtime directly; no HTTP
 		from ai_module import api as ai_api
@@ -154,6 +163,10 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		composed = f"{composed}\n\n[args]: {frappe.as_json(context_summary)}"
 
 		result = ai_api.ai_run_agent(agent_name=agent_name, message=composed, session_id=session_id, model=None)
+		try:
+			frappe.logger().info(f"[ai_module] whatsapp ai result keys={list(result.keys()) if isinstance(result, dict) else type(result)}")
+		except Exception:
+			pass
 
 		# Optional auto-reply via CRM, controlled by env AI_AUTOREPLY
 		autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower() in {"1", "true", "yes", "on"}

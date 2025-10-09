@@ -12,7 +12,6 @@ from .config import (
 	get_env_assistant_spec,
 	get_environment,
 )
-from .assistant_update import get_current_instructions
 from .assistant_spec import get_assistant_tools
 
 
@@ -50,6 +49,8 @@ def ensure_openai_assistant() -> Optional[str]:
 		name = spec_env.get("name") or frappe.conf.get("AI_ASSISTANT_NAME") or "AI Assistant"
 		model = spec_env.get("model") or frappe.conf.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
 
+	# Local import to avoid circular dependency at module import time
+	from .assistant_update import get_current_instructions
 	instructions = get_current_instructions()
 	tools = get_assistant_tools() or None
 	assistant = client.beta.assistants.create(

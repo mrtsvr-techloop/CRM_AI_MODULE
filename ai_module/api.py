@@ -39,6 +39,7 @@ def ai_debug_env() -> Dict[str, Any]:
 		"OPENAI_PROJECT",
 		"OPENAI_BASE_URL",
 		"OPENAI_API_KEY",  # only presence is reflected via api_key_present
+		"AI_WHATSAPP_INLINE",
 	}
 	filtered_env = {k: ("***" if k == "OPENAI_API_KEY" and env.get(k) else env.get(k)) for k in sorted(visible_keys)}
 

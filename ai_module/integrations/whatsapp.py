@@ -106,6 +106,20 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			pass
 
+		# Inline processing fallback when no worker is available
+		try:
+			env = get_environment()
+			inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower() in {"1", "true", "yes", "on"}
+			if inline:
+				try:
+					frappe.logger().info("[ai_module] whatsapp inline processing enabled; executing synchronously")
+				except Exception:
+					pass
+				process_incoming_whatsapp_message(payload)
+				return
+		except Exception:
+			pass
+
 		# Enqueue lightweight job so we don't slow down insert path
 		frappe.enqueue(
 			"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",

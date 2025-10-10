@@ -84,6 +84,12 @@ def run_with_openai_threads(
 			# Tool calls needed
 			tool_outputs = []
 			for tc in r.required_action.submit_tool_outputs.tool_calls:  # type: ignore[attr-defined]
+				# Attempt lazy registration of tool impl if missing
+				try:
+					from .tools import ensure_tool_impl_registered
+					ensure_tool_impl_registered(getattr(tc.function, "name", ""))  # type: ignore[attr-defined]
+				except Exception:
+					pass
 				output = _execute_function_tool(tc)
 				tool_outputs.append({"tool_call_id": tc.id, "output": output})
 			client.beta.threads.runs.submit_tool_outputs(
@@ -99,17 +105,29 @@ def run_with_openai_threads(
 			raise TimeoutError("Timed out waiting for OpenAI run to complete")
 		time.sleep(poll_interval_s)
 
-	msgs = client.beta.threads.messages.list(thread_id=thread_id, order="desc", limit=1)
+	msgs = client.beta.threads.messages.list(thread_id=thread_id, order="desc", limit=5)
 	final_text = ""
+	# Prefer the most recent assistant message to avoid returning the user's echo
 	if msgs.data:
-		m = msgs.data[0]
-		parts = []
-		for c in getattr(m, "content", []) or []:
-			# Expect text entries; join them if multiple
-			text = getattr(getattr(c, "text", None), "value", None)
-			if text:
-				parts.append(text)
-		final_text = "\n".join(parts).strip()
+		for m in msgs.data:
+			if getattr(m, "role", None) == "assistant":
+				parts = []
+				for c in getattr(m, "content", []) or []:
+					# Expect text entries; join them if multiple
+					text = getattr(getattr(c, "text", None), "value", None)
+					if text:
+						parts.append(text)
+				final_text = "\n".join(parts).strip()
+				break
+		# Fallback to latest message if no assistant message found
+		if not final_text:
+			m = msgs.data[0]
+			parts = []
+			for c in getattr(m, "content", []) or []:
+				text = getattr(getattr(c, "text", None), "value", None)
+				if text:
+					parts.append(text)
+			final_text = "\n".join(parts).strip()
 
 	return {
 		"final_output": final_text,

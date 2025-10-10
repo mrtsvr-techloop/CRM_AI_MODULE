@@ -90,3 +90,24 @@ def register_all_tool_impls() -> None:
 		except Exception:
 			# Ignore failures for optional tools
 			pass 
+
+
+def ensure_tool_impl_registered(tool_name: str) -> bool:
+	"""Ensure a specific tool implementation is registered on-demand.
+
+	Returns True if registered or already present; False otherwise.
+	"""
+	_discover_tools()
+	from ..tool_registry import list_tool_impls, register_tool_impl
+	if tool_name in list_tool_impls():
+		return True
+	try:
+		dotted = _NAME_TO_IMPL.get(tool_name)
+		if not dotted:
+			return False
+		module_path, func_name = dotted.rsplit(".", 1)
+		func = getattr(importlib.import_module(module_path), func_name)
+		register_tool_impl(tool_name, func)
+		return True
+	except Exception:
+		return False

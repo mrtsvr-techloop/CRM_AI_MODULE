@@ -120,13 +120,20 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			pass
 
-		# Enqueue lightweight job so we don't slow down insert path
+		# Enqueue background job
+		queue_name = (get_environment().get("AI_WHATSAPP_QUEUE") or "long").strip() or "long"
+		try:
+			custom_timeout = get_environment().get("AI_WHATSAPP_TIMEOUT")
+			timeout = int(custom_timeout) if str(custom_timeout or "").strip().isdigit() else 180
+		except Exception:
+			timeout = 180
 		frappe.enqueue(
 			"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
-			queue="default",
+			queue=queue_name,
 			job_name=f"ai_whatsapp_{doc.name}",
 			payload=payload,
 			now=False,
+			timeout=timeout,
 		)
 	except Exception:
 		frappe.log_error(

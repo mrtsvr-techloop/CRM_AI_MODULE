@@ -178,13 +178,22 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			pass
 
 		# Optional auto-reply via CRM, controlled by env AI_AUTOREPLY
-		autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower() in {"1", "true", "yes", "on"}
+		raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
+		autoreply = raw_autoreply in {"1", "true", "yes", "on"}
+		try:
+			frappe.logger().info(f"[ai_module] whatsapp autoreply={autoreply} raw='{raw_autoreply}'")
+		except Exception:
+			pass
 		if autoreply:
 			reply_text = (result.get("final_output") or "").strip() if isinstance(result, dict) else ""
+			try:
+				frappe.logger().info(f"[ai_module] whatsapp reply_text_chars={len(reply_text)}")
+			except Exception:
+				pass
 			if reply_text:
 				try:
 					from crm.api.whatsapp import create_whatsapp_message
-					create_whatsapp_message(
+					name = create_whatsapp_message(
 						payload.get("reference_doctype"),
 						payload.get("reference_name"),
 						reply_text,
@@ -193,6 +202,10 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 						payload.get("name"),
 						"text",
 					)
+					try:
+						frappe.logger().info(f"[ai_module] whatsapp created outbound message name={name}")
+					except Exception:
+						pass
 				except Exception:
 					frappe.log_error(
 						message=frappe.get_traceback(),

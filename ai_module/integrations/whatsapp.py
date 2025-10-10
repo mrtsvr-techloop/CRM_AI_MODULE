@@ -1,7 +1,7 @@
 import frappe
 from typing import Any, Dict
 from openai import OpenAI
-from ai_module.agents.config import get_environment
+from ai_module.agents.config import get_environment, apply_environment
 
 
 def _is_incoming_message(doc) -> bool:
@@ -94,6 +94,8 @@ def on_whatsapp_after_insert(doc, method=None):
 	Forward only Incoming non-reaction messages to the AI via Python include.
 	"""
 	try:
+		# Ensure env is applied for worker context
+		apply_environment()
 		if not _is_incoming_message(doc) or _should_ignore(doc):
 			return
 
@@ -161,6 +163,13 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			composed = f"[non-text:{payload.get('content_type')}]"
 		# Attach lightweight args for the agent to parse
 		composed = f"{composed}\n\n[args]: {frappe.as_json(context_summary)}"
+
+		# Ensure we have an assistant_id, create if missing
+		try:
+			from ai_module.agents.assistant_setup import ensure_openai_assistant
+			ensure_openai_assistant()
+		except Exception:
+			pass
 
 		result = ai_api.ai_run_agent(agent_name=agent_name, message=composed, session_id=session_id, model=None)
 		try:

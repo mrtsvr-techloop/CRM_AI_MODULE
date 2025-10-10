@@ -85,13 +85,15 @@ def apply_environment() -> None:
     Supported keys:
     - OPENAI_API_KEY (required)
     - OPENAI_ORG_ID (optional)
-    - OPENAI_PROJECT (optional)
+	- OPENAI_PROJECT (optional)
+	- OPENAI_BASE_URL (optional)
     """
     env = get_environment()
     for key in (
         "OPENAI_API_KEY",
         "OPENAI_ORG_ID",
-        "OPENAI_PROJECT",
+		"OPENAI_PROJECT",
+		"OPENAI_BASE_URL",
     ):
         val = env.get(key)
         if val:

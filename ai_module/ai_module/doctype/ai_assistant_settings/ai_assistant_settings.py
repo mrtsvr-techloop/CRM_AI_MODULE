@@ -25,15 +25,15 @@ class AIAssistantSettings(Document):
 		self.org_id = conf.get("OPENAI_ORG_ID") or env.get("OPENAI_ORG_ID") or ""
 		# Additional env-derived display fields
 		self.api_key_present = 1 if (conf.get("OPENAI_API_KEY") or env.get("OPENAI_API_KEY")) else 0
-		# Do not override user-entered assistant_id; only fill if empty
-		if not (self.assistant_id or "").strip():
-			self.assistant_id = get_openai_assistant_id() or ""
 		# Removed fields are no longer populated
 
 	def validate(self):
 		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()
 		# Do not enforce API key at save time; runtime will skip actions if missing
+		# If override is OFF, ensure assistant_id is cleared so it never persists
+		if not getattr(self, "use_settings_override", 0):
+			self.assistant_id = ""
 		# Always refresh display fields before save (no-op if override is on)
 		self._populate_readonly_from_env()
 

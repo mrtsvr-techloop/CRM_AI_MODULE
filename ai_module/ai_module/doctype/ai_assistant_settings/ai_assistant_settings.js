@@ -58,6 +58,10 @@ frappe.ui.form.on('AI Assistant Settings', {
       const enabled = frm.doc.use_settings_override ? 1 : 0;
       frm.set_df_property('assistant_id', 'read_only', enabled ? 0 : 1);
       frm.set_df_property('instructions', 'read_only', enabled ? 0 : 1);
+      if (!enabled) {
+        // Clear assistant_id when override is OFF to avoid accidental persistence
+        frm.set_value('assistant_id', '');
+      }
       toggle_editability();
       frm.refresh_field('assistant_id');
       frm.refresh_field('instructions');

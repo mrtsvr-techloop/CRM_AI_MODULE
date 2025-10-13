@@ -41,7 +41,7 @@ def _execute_function_tool(tool_call: Any) -> str:
 		from .tool_registry import get_tool_impl
 		impl = get_tool_impl(name)
 		result = impl(**args)
-		return json.dumps(result) if not isinstance(result, str) else result
+		return json.dumps(result, default=str) if not isinstance(result, str) else result
 	except KeyError:
 		return json.dumps({"error": f"no_implementation_for_{name}"})
 	except Exception as exc:

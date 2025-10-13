@@ -84,10 +84,16 @@ def run_with_openai_threads(
 			# Tool calls needed
 			tool_outputs = []
 			for tc in r.required_action.submit_tool_outputs.tool_calls:  # type: ignore[attr-defined]
-				# Attempt lazy registration of tool impl if missing
+				# Attempt lazy registration of tool impl if missing; log tool name
+				tool_name = getattr(getattr(tc, "function", None), "name", "")  # type: ignore[attr-defined]
 				try:
 					from .tools import ensure_tool_impl_registered
-					ensure_tool_impl_registered(getattr(tc.function, "name", ""))  # type: ignore[attr-defined]
+					registered = ensure_tool_impl_registered(tool_name)
+					try:
+						import frappe
+						frappe.logger().info(f"[ai_module] tool_call name={tool_name} registered={registered}")
+					except Exception:
+						pass
 				except Exception:
 					pass
 				output = _execute_function_tool(tc)

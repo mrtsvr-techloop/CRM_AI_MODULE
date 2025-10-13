@@ -34,6 +34,10 @@ SCHEMA: Dict[str, Any] = {
 	},
 }
 
-# Use dotted import for implementation to avoid hard dependency at import time
-# Note: In Frappe, the python package for this app is 'crm', not 'techloop_crm'.
-IMPL_DOTTED_PATH = "crm.api.workflow.new_client_lead"
+# Direct implementation wrapper: import and delegate at call-time (avoids import-order issues)
+def new_client_lead(**kwargs) -> Dict[str, Any]:
+	from crm.api.workflow import new_client_lead as _impl
+	return _impl(**kwargs)
+
+# Register callable implementation immediately during discovery
+IMPL_FUNC = new_client_lead

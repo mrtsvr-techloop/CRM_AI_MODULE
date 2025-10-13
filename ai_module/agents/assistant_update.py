@@ -4,6 +4,7 @@ from typing import Optional
 
 import frappe
 from openai import OpenAI
+import openai
 
 from .assistant_setup import ensure_openai_assistant
 from .config import apply_environment, get_env_assistant_spec, get_openai_assistant_id, set_persisted_assistant_id, get_settings_prompt_only, get_environment
@@ -62,12 +63,23 @@ def upsert_assistant(force: bool = False) -> str:
 		return assistant_id
 
 	# Update existing
-	assistant = client.beta.assistants.update(
-		assistant_id,
-		name=name,
-		instructions=instructions,
-		model=model,
-		tools=tools,
-	)
-	set_persisted_assistant_id(assistant.id)
-	return assistant.id 
+	try:
+		assistant = client.beta.assistants.update(
+			assistant_id,
+			name=name,
+			instructions=instructions,
+			model=model,
+			tools=tools,
+		)
+		set_persisted_assistant_id(assistant.id)
+		return assistant.id
+	except openai.NotFoundError:
+		# If stored id is invalid or deleted remotely, create a fresh Assistant
+		assistant = client.beta.assistants.create(
+			name=name,
+			instructions=instructions,
+			model=model,
+			tools=tools,
+		)
+		set_persisted_assistant_id(assistant.id)
+		return assistant.id

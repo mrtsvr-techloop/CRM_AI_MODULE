@@ -49,7 +49,8 @@ class AIAssistantSettings(Document):
 		env = get_environment()
 		if not env.get("OPENAI_API_KEY"):
 			return
-		# Only trigger an update if user opted into using settings as source
+		# If user opted into using settings as source, force upsert (create if missing)
+		# Otherwise, do NOT block save; assistant id will be resolved from env/persisted file
 		if not getattr(self, "use_settings_override", 0):
 			return
 		from ai_module.agents.assistant_update import upsert_assistant

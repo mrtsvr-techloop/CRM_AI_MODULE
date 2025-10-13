@@ -159,10 +159,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 				"doctype": payload.get("reference_doctype"),
 				"name": payload.get("reference_name"),
 			},
-			"sender": {
-				"phone": payload.get("from"),
-				"profile_name": payload.get("profile_name"),
-			},
+			"channel": "whatsapp",
 			"message": {
 				"id": payload.get("message_id"),
 				"type": payload.get("message_type"),

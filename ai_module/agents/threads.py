@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Optional
 
 from openai import OpenAI
+import frappe
 
 
 def _ensure_thread_id(session_id: Optional[str], client: OpenAI) -> str:
@@ -25,7 +26,25 @@ def _ensure_thread_id(session_id: Optional[str], client: OpenAI) -> str:
 	return thread.id
 
 
-def _execute_function_tool(tool_call: Any) -> str:
+def _lookup_phone_from_thread(thread_id: str) -> Optional[str]:
+	"""Best-effort reverse lookup: find phone by thread id from persisted map."""
+	try:
+		path = frappe.utils.get_site_path("private", "files", "ai_whatsapp_threads.json")
+		import os, json as _json  # noqa: WPS433
+		if not os.path.exists(path):
+			return None
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			mapping = _json.loads(data) if data else {}
+		for phone, tid in mapping.items():
+			if tid == thread_id:
+				return str(phone)
+		return None
+	except Exception:
+		return None
+
+
+def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
 	"""Execute a function tool call locally using registered implementations.
 
 	If no implementation is found, return an informative error string.
@@ -36,6 +55,16 @@ def _execute_function_tool(tool_call: Any) -> str:
 		args = json.loads(args_json) if args_json else {}
 	except Exception:
 		return "{\"error\": \"invalid_tool_call\"}"
+
+	# Inject phone_from from thread map if not provided
+	try:
+		pf = (args.get("phone_from") or "").strip()
+		if not pf:
+			pf = _lookup_phone_from_thread(thread_id) or ""
+			if pf:
+				args["phone_from"] = pf
+	except Exception:
+		pass
 
 	try:
 		from .tool_registry import get_tool_impl
@@ -90,13 +119,12 @@ def run_with_openai_threads(
 					from .tools import ensure_tool_impl_registered
 					registered = ensure_tool_impl_registered(tool_name)
 					try:
-						import frappe
 						frappe.logger().info(f"[ai_module] tool_call name={tool_name} registered={registered}")
 					except Exception:
 						pass
 				except Exception:
 					pass
-				output = _execute_function_tool(tc)
+				output = _execute_function_tool(tc, thread_id)
 				tool_outputs.append({"tool_call_id": tc.id, "output": output})
 			client.beta.threads.runs.submit_tool_outputs(
 				thread_id=thread_id,

@@ -92,38 +92,7 @@ def register_all_tool_impls() -> None:
 			pass 
 
 
-def register_tool_from_function(func, schema: Optional[Dict[str, Any]] = None, name: Optional[str] = None) -> str:
-	"""Register a tool implementation and (optionally) its Assistant schema.
-
-	- func: Python function implementing the tool logic
-	- schema: Full Assistants API function tool schema (if None, a minimal schema is created)
-	- name: Registry key; defaults to func.__name__
-	Returns the tool name used for registration.
-	"""
-	tool_name = name or getattr(func, "__name__", None)
-	if not tool_name:
-		raise ValueError("Tool name could not be determined from function; please specify name")
-	# Register implementation for runtime tool-calls
-	register_tool_impl(tool_name, func)
-	# Register schema so Assistant can expose the tool
-	if schema is None:
-		desc = (getattr(func, "__doc__", None) or "Assistant function tool").strip()
-		schema = {
-			"type": "function",
-			"function": {
-				"name": tool_name,
-				"description": desc,
-				"parameters": {"type": "object", "properties": {}},
-			},
-		}
-	else:
-		# Ensure schema name matches
-		try:
-			schema["function"]["name"] = tool_name
-		except Exception:
-			pass
-	_NAME_TO_SCHEMA[tool_name] = schema
-	return tool_name
+ 
 
 
 def ensure_tool_impl_registered(tool_name: str) -> bool:

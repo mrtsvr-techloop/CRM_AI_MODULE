@@ -153,17 +153,24 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		agent_name = env.get("AI_AGENT_NAME") or "crm_ai"
 
 		message_text = (payload.get("message") or "").strip()
-		# Build a compact context string; agents can parse JSON-ish args if needed
+		# Build a compact, AI-friendly context
 		context_summary = {
-			"reference_doctype": payload.get("reference_doctype"),
-			"reference_name": payload.get("reference_name"),
-			"from": payload.get("from"),
-			"to": payload.get("to"),
-			"message_id": payload.get("message_id"),
-			"is_reply": payload.get("is_reply"),
-			"reply_to_message_id": payload.get("reply_to_message_id"),
-			"content_type": payload.get("content_type"),
-			"attach": payload.get("attach"),
+			"reference": {
+				"doctype": payload.get("reference_doctype"),
+				"name": payload.get("reference_name"),
+			},
+			"sender": {
+				"phone": payload.get("from"),
+				"profile_name": payload.get("profile_name"),
+			},
+			"message": {
+				"id": payload.get("message_id"),
+				"type": payload.get("message_type"),
+				"content_type": payload.get("content_type"),
+				"is_reply": payload.get("is_reply"),
+				"reply_to": payload.get("reply_to_message_id"),
+				"attach": payload.get("attach"),
+			},
 		}
 
 		# Always use OpenAI Threads: persist a thread per phone number
@@ -177,12 +184,12 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		# Import AI runtime directly; no HTTP
 		from ai_module import api as ai_api
 
-		# Compose an input that includes message and structured args as trailing JSON
+		# Compose an input that includes the user's text and a compact JSON args block
 		composed = message_text or ""
 		if not composed:
 			# For non-text messages, provide a stub plus metadata
 			composed = f"[non-text:{payload.get('content_type')}]"
-		# Attach lightweight args for the agent to parse
+		# Attach lightweight args for the agent to parse (single JSON object)
 		composed = f"{composed}\n\n[args]: {frappe.as_json(context_summary)}"
 
 		# Ensure we have an assistant_id, create if missing

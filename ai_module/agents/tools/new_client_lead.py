@@ -35,4 +35,5 @@ SCHEMA: Dict[str, Any] = {
 }
 
 # Use dotted import for implementation to avoid hard dependency at import time
-IMPL_DOTTED_PATH = "techloop_crm.crm.api.workflow.new_client_lead" 
+# Note: In Frappe, the python package for this app is 'crm', not 'techloop_crm'.
+IMPL_DOTTED_PATH = "crm.api.workflow.new_client_lead"

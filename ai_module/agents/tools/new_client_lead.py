@@ -18,6 +18,9 @@ SCHEMA: Dict[str, Any] = {
 				"email": {"type": "string", "format": "email"},
 				"mobile_no": {"type": "string"},
 				"organization": {"type": "string"},
+				"reference_doctype": {"type": "string"},
+				"reference_name": {"type": "string"},
+				"phone_from": {"type": "string"},
 				"website": {"type": "string"},
 				"territory": {"type": "string"},
 				"industry": {"type": "string"},
@@ -26,7 +29,6 @@ SCHEMA: Dict[str, Any] = {
 			"required": [
 				"first_name",
 				"last_name",
-				"email",
 				"mobile_no",
 				"organization",
 			],
@@ -35,7 +37,12 @@ SCHEMA: Dict[str, Any] = {
 }
 
 # Direct implementation wrapper: import and delegate at call-time (avoids import-order issues)
+
 def new_client_lead(**kwargs) -> Dict[str, Any]:
+	# Always prefer the WhatsApp-originating number if provided by the agent context
+	phone_from = (kwargs.get("phone_from") or "").strip()
+	if phone_from:
+		kwargs["mobile_no"] = phone_from
 	from crm.api.workflow import new_client_lead as _impl
 	return _impl(**kwargs)
 

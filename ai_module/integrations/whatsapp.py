@@ -242,6 +242,22 @@ def on_whatsapp_after_insert(doc, method=None):
 		if not _is_incoming_message(doc) or _should_ignore(doc):
 			return
 
+		# Log receipt of the incoming insert/event
+		try:
+			import logging as _logging  # noqa: WPS433
+			_logging.getLogger(__name__).info(
+				"[ai_module] received WhatsApp insert name=%s type=%s ref=%s/%s",
+				doc.name,
+				doc.get("type"),
+				doc.get("reference_doctype"),
+				doc.get("reference_name"),
+			)
+			frappe.logger().info(
+				f"[ai_module] received whatsapp insert name={doc.name} type={doc.get('type')} ref={doc.get('reference_doctype')}/{doc.get('reference_name')}"
+			)
+		except Exception:
+			pass
+
 		# If a human interacted recently, do not run AI
 		try:
 			if _is_human_active(doc.get("from")):
@@ -297,6 +313,13 @@ def on_whatsapp_after_insert(doc, method=None):
 			except Exception:
 				inline = raw_inline in {"1", "true", "yes", "on"}
 			if inline:
+				# Before sending to AI (inline)
+				try:
+					import logging as _logging  # noqa: WPS433
+					_logging.getLogger(__name__).info("[ai_module] dispatch inline to AI for message=%s", doc.name)
+					frappe.logger().info(f"[ai_module] dispatch inline to AI for message={doc.name}")
+				except Exception:
+					pass
 				try:
 					frappe.logger().info("[ai_module] whatsapp inline processing active; executing synchronously")
 				except Exception:
@@ -314,6 +337,20 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			timeout = 180
 		try:
+			# Before sending to AI (enqueue)
+			try:
+				import logging as _logging  # noqa: WPS433
+				_logging.getLogger(__name__).info(
+					"[ai_module] enqueue to AI queue=%s timeout=%s name=%s",
+					queue_name,
+					timeout,
+					doc.name,
+				)
+				frappe.logger().info(
+					f"[ai_module] enqueue whatsapp job queue={queue_name} timeout={timeout} name={doc.name}"
+				)
+			except Exception:
+				pass
 			frappe.enqueue(
 				"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
 				queue=queue_name,

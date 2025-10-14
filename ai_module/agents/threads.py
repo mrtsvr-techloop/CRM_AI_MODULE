@@ -95,6 +95,21 @@ def run_with_openai_threads(
 	client = OpenAI()
 	thread_id = _ensure_thread_id(session_id, client)
 
+	# Before sending to AI
+	try:
+		import logging as _logging  # noqa: WPS433
+		_logging.getLogger(__name__).info(
+			"[ai_module] before_send message_len=%s session=%s assistant=%s",
+			len(message or ""),
+			thread_id,
+			assistant_id,
+		)
+		frappe.logger().info(
+			f"[ai_module] before_send message_len={len(message or '')} session={thread_id} assistant={assistant_id}"
+		)
+	except Exception:
+		pass
+
 	client.beta.threads.messages.create(
 		thread_id=thread_id,
 		role="user",
@@ -111,6 +126,13 @@ def run_with_openai_threads(
 	while True:
 		r = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
 		status = r.status
+		# While waiting
+		try:
+			import logging as _logging  # noqa: WPS433
+			_logging.getLogger(__name__).info("[ai_module] waiting status=%s session=%s", status, thread_id)
+			frappe.logger().debug(f"[ai_module] waiting status={status} session={thread_id}")
+		except Exception:
+			pass
 		if status == "requires_action":
 			# Tool calls needed
 			tool_outputs = []
@@ -164,6 +186,20 @@ def run_with_openai_threads(
 				if text:
 					parts.append(text)
 			final_text = "\n".join(parts).strip()
+
+	# Before returning response
+	try:
+		import logging as _logging  # noqa: WPS433
+		_logging.getLogger(__name__).info(
+			"[ai_module] before_return text_len=%s session=%s",
+			len(final_text or ""),
+			thread_id,
+		)
+		frappe.logger().info(
+			f"[ai_module] before_return text_len={len(final_text or '')} session={thread_id}"
+		)
+	except Exception:
+		pass
 
 	return {
 		"final_output": final_text,

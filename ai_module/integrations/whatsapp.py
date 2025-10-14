@@ -17,18 +17,7 @@ def _should_ignore(doc) -> bool:
 	return content_type == "reaction"
 
 
-def _is_dev_env() -> bool:
-	"""Return True when running in developer/local environment.
-
-	Heuristics: Frappe developer_mode or localhost URL.
-	"""
-	try:
-		if int(getattr(frappe.conf, "developer_mode", 0) or 0) == 1:
-			return True
-		url = str(frappe.utils.get_url() or "")
-    return url.startswith("http://localhost") or url.startswith("http://127.0.0.1")
-	except Exception:
-		return False
+# Removed dev/prod behavior: defaults are constant unless overridden by DocType/env
 
 
 def _build_payload(doc) -> Dict[str, Any]:
@@ -156,18 +145,18 @@ def _mark_human_activity(phone: str) -> None:
 
 def _human_cooldown_seconds() -> int:
 	try:
-        # Prefer DocType override when enabled
-        sec = None
-        try:
-            doc = frappe.get_single("AI Assistant Settings")
-            if getattr(doc, "use_settings_override", 0):
-                sec = int(getattr(doc, "wa_human_cooldown_seconds", 0) or 0)
-        except Exception:
-            sec = None
-        if sec and sec > 0:
-            return int(sec)
-        val = (get_environment().get("AI_HUMAN_COOLDOWN_SECONDS") or "").strip()
-        return int(val) if str(val).isdigit() else 300
+		# Prefer DocType override when enabled
+		sec = None
+		try:
+			doc = frappe.get_single("AI Assistant Settings")
+			if getattr(doc, "use_settings_override", 0):
+				sec = int(getattr(doc, "wa_human_cooldown_seconds", 0) or 0)
+		except Exception:
+			sec = None
+		if sec and sec > 0:
+			return int(sec)
+		val = (get_environment().get("AI_HUMAN_COOLDOWN_SECONDS") or "").strip()
+		return int(val) if str(val).isdigit() else 300
 	except Exception:
 		return 300
 
@@ -294,7 +283,7 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			pass
 
-        # Inline processing: prefer DocType override; else default ON in dev when env unset
+		# Inline processing: prefer DocType override; else enable only if env explicitly set
 		try:
             env = get_environment()
             raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
@@ -304,9 +293,9 @@ def on_whatsapp_after_insert(doc, method=None):
                 if getattr(doc_settings, "use_settings_override", 0):
                     inline = bool(getattr(doc_settings, "wa_force_inline", 0))
                 else:
-                    inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
+					inline = raw_inline in {"1", "true", "yes", "on"}
             except Exception:
-                inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
+				inline = raw_inline in {"1", "true", "yes", "on"}
 			if inline:
 				try:
 					frappe.logger().info("[ai_module] whatsapp inline processing active; executing synchronously")
@@ -415,16 +404,16 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		except Exception:
 			pass
 
-        # Optional auto-reply via CRM; prefer DocType override; default ON in dev when env unset
+		# Optional auto-reply via CRM; prefer DocType override; else enable only if env explicitly set
         raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
         try:
             doc_settings = frappe.get_single("AI Assistant Settings")
             if getattr(doc_settings, "use_settings_override", 0):
                 autoreply = bool(getattr(doc_settings, "wa_enable_autoreply", 0))
             else:
-                autoreply = (_is_dev_env() if raw_autoreply == "" else raw_autoreply in {"1", "true", "yes", "on"})
+				autoreply = raw_autoreply in {"1", "true", "yes", "on"}
         except Exception:
-            autoreply = (_is_dev_env() if raw_autoreply == "" else raw_autoreply in {"1", "true", "yes", "on"})
+			autoreply = raw_autoreply in {"1", "true", "yes", "on"}
 		try:
 			frappe.logger().info(f"[ai_module] whatsapp autoreply={autoreply} raw='{raw_autoreply}'")
 		except Exception:

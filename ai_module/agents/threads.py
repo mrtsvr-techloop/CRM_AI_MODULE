@@ -56,13 +56,15 @@ def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
 	except Exception:
 		return "{\"error\": \"invalid_tool_call\"}"
 
-	# Inject phone_from from thread map if not provided
+	# Enforce phone sourcing from thread map and never from user-provided args
 	try:
-		pf = (args.get("phone_from") or "").strip()
-		if not pf:
-			pf = _lookup_phone_from_thread(thread_id) or ""
-			if pf:
-				args["phone_from"] = pf
+		thread_phone = _lookup_phone_from_thread(thread_id) or ""
+		if thread_phone:
+			# Always override any incoming phone_from with the trusted thread phone
+			args["phone_from"] = thread_phone
+		# For sensitive tools, ensure direct mobile_no is never accepted from user
+		if name == "new_client_lead":
+			args.pop("mobile_no", None)
 	except Exception:
 		pass
 

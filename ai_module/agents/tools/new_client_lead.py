@@ -7,8 +7,8 @@ SCHEMA: Dict[str, Any] = {
 	"function": {
 		"name": "new_client_lead",
 		"description": (
-			"Create a new CRM Lead. Required: first_name, last_name, email, mobile_no, organization. "
-			"Optional: website, territory, industry, source."
+            "Create a new CRM Lead. Required: first_name, last_name, email, organization. "
+            "Optional: mobile_no (prefer phone_from if available), website, territory, industry, source."
 		),
 		"parameters": {
 			"type": "object",
@@ -29,7 +29,6 @@ SCHEMA: Dict[str, Any] = {
 			"required": [
 				"first_name",
 				"last_name",
-				"mobile_no",
 				"organization",
 			],
 		},
@@ -39,6 +38,9 @@ SCHEMA: Dict[str, Any] = {
 # Direct implementation wrapper: import and delegate at call-time (avoids import-order issues)
 
 def new_client_lead(**kwargs) -> Dict[str, Any]:
+	# Security: NEVER use user-provided mobile_no. Always source from thread context.
+	# Remove any incoming mobile_no to avoid accidental use.
+	kwargs.pop("mobile_no", None)
 	# Always prefer the WhatsApp-originating number if provided by the agent context
 	phone_from = (kwargs.get("phone_from") or "").strip()
 	if phone_from:

@@ -285,16 +285,16 @@ def on_whatsapp_after_insert(doc, method=None):
 
 		# Inline processing: prefer DocType override; else enable only if env explicitly set
 		try:
-            env = get_environment()
-            raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
-            # DocType override
-            try:
-                doc_settings = frappe.get_single("AI Assistant Settings")
-                if getattr(doc_settings, "use_settings_override", 0):
-                    inline = bool(getattr(doc_settings, "wa_force_inline", 0))
-                else:
+			env = get_environment()
+			raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
+			# DocType override
+			try:
+				doc_settings = frappe.get_single("AI Assistant Settings")
+				if getattr(doc_settings, "use_settings_override", 0):
+					inline = bool(getattr(doc_settings, "wa_force_inline", 0))
+				else:
 					inline = raw_inline in {"1", "true", "yes", "on"}
-            except Exception:
+			except Exception:
 				inline = raw_inline in {"1", "true", "yes", "on"}
 			if inline:
 				try:

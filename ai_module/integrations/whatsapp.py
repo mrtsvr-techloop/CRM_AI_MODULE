@@ -99,6 +99,16 @@ def on_whatsapp_after_insert(doc, method=None):
 		if not _is_incoming_message(doc) or _should_ignore(doc):
 			return
 
+        # Internal: ensure a Contact exists for this incoming phone (no external API)
+        try:
+            from crm.api.workflow import ensure_contact_from_message
+            ensure_contact_from_message(message_name=doc.name)
+        except Exception:
+            try:
+                frappe.logger().warning("[ai_module] ensure_contact_from_message failed (non-fatal)")
+            except Exception:
+                pass
+
 		payload = _build_payload(doc)
 		# Trace enqueue intent.
 		try:

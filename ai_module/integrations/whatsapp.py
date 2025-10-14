@@ -405,14 +405,14 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			pass
 
 		# Optional auto-reply via CRM; prefer DocType override; else enable only if env explicitly set
-        raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
-        try:
-            doc_settings = frappe.get_single("AI Assistant Settings")
-            if getattr(doc_settings, "use_settings_override", 0):
-                autoreply = bool(getattr(doc_settings, "wa_enable_autoreply", 0))
-            else:
+		raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
+		try:
+			doc_settings = frappe.get_single("AI Assistant Settings")
+			if getattr(doc_settings, "use_settings_override", 0):
+				autoreply = bool(getattr(doc_settings, "wa_enable_autoreply", 0))
+			else:
 				autoreply = raw_autoreply in {"1", "true", "yes", "on"}
-        except Exception:
+		except Exception:
 			autoreply = raw_autoreply in {"1", "true", "yes", "on"}
 		try:
 			frappe.logger().info(f"[ai_module] whatsapp autoreply={autoreply} raw='{raw_autoreply}'")
@@ -427,7 +427,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			if reply_text:
 				try:
 					from crm.api.whatsapp import create_whatsapp_message
-                    name = create_whatsapp_message(
+					name = create_whatsapp_message(
 						payload.get("reference_doctype"),
 						payload.get("reference_name"),
 						reply_text,

@@ -17,6 +17,20 @@ def _should_ignore(doc) -> bool:
 	return content_type == "reaction"
 
 
+def _is_dev_env() -> bool:
+	"""Return True when running in developer/local environment.
+
+	Heuristics: Frappe developer_mode or localhost URL.
+	"""
+	try:
+		if int(getattr(frappe.conf, "developer_mode", 0) or 0) == 1:
+			return True
+		url = str(frappe.utils.get_url() or "")
+		return url.startswith("http://localhost") or url.startswith("http://127.0.0.1")
+	except Exception:
+		return False
+
+
 def _build_payload(doc) -> Dict[str, Any]:
 	"""Build a structured payload for the AI from WhatsApp Message doc."""
 	return {
@@ -46,6 +60,10 @@ def _thread_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_threads.json")
 
 
+def _lang_map_path() -> str:
+	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_lang.json")
+
+
 def _load_thread_map() -> Dict[str, str]:
 	try:
 		path = _thread_map_path()
@@ -68,6 +86,57 @@ def _save_thread_map(mapping: Dict[str, str]) -> None:
 			f.write(json.dumps(mapping))
 	except Exception:
 		pass
+
+
+def _load_lang_map() -> Dict[str, str]:
+	try:
+		path = _lang_map_path()
+		import os, json  # noqa: WPS433
+		if not os.path.exists(path):
+			return {}
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			return json.loads(data) if data else {}
+	except Exception:
+		return {}
+
+
+def _save_lang_map(mapping: Dict[str, str]) -> None:
+	try:
+		path = _lang_map_path()
+		import os, json  # noqa: WPS433
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, "w", encoding="utf-8") as f:
+			f.write(json.dumps(mapping))
+	except Exception:
+		pass
+
+
+def _detect_language(text: str) -> str:
+	"""Best-effort language detection.
+
+	- Tries langid if available; else naive keyword heuristics; defaults to 'it'.
+	"""
+	try:
+		import langid  # type: ignore
+		code, _ = langid.classify(text or "")
+		return (code or "it").split("-")[0]
+	except Exception:
+		pass
+	# Simple heuristic
+	val = (text or "").lower()
+	try:
+		if any(w in val for w in ["hola", "gracias", "buenos", "por favor"]):
+			return "es"
+		if any(w in val for w in ["bonjour", "merci", "s'il vous plaît", "salut"]):
+			return "fr"
+		if any(w in val for w in ["hello", "thanks", "please", "hi", "the "]):
+			return "en"
+		if any(w in val for w in ["ciao", "grazie", "per favore", "buongiorno"]):
+			return "it"
+		return "it"
+	except Exception:
+		return "it"
 
 
 def _get_or_create_thread_for_phone(phone: str) -> str:
@@ -109,6 +178,19 @@ def on_whatsapp_after_insert(doc, method=None):
 			except Exception:
 				pass
 
+		# Persist detected language per phone for later context use
+		try:
+			phone_key = (doc.get("from") or "").strip()
+			lang_map = _load_lang_map()
+			lang_detected = _detect_language(doc.get("message") or "")
+			if phone_key and lang_detected:
+				prev = lang_map.get(phone_key)
+				if prev != lang_detected:
+					lang_map[phone_key] = lang_detected
+					_save_lang_map(lang_map)
+		except Exception:
+			pass
+
 		payload = _build_payload(doc)
 		# Trace enqueue intent.
 		try:
@@ -116,13 +198,14 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			pass
 
-		# Inline processing fallback when no worker is available
+		# Inline processing: default to ON in development when env unset
 		try:
 			env = get_environment()
-			inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower() in {"1", "true", "yes", "on"}
+			raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
+			inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
 			if inline:
 				try:
-					frappe.logger().info("[ai_module] whatsapp inline processing enabled; executing synchronously")
+					frappe.logger().info("[ai_module] whatsapp inline processing active; executing synchronously")
 				except Exception:
 					pass
 				process_incoming_whatsapp_message(payload)
@@ -137,14 +220,22 @@ def on_whatsapp_after_insert(doc, method=None):
 			timeout = int(custom_timeout) if str(custom_timeout or "").strip().isdigit() else 180
 		except Exception:
 			timeout = 180
-		frappe.enqueue(
-			"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
-			queue=queue_name,
-			job_name=f"ai_whatsapp_{doc.name}",
-			payload=payload,
-			now=False,
-			timeout=timeout,
-		)
+		try:
+			frappe.enqueue(
+				"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
+				queue=queue_name,
+				job_name=f"ai_whatsapp_{doc.name}",
+				payload=payload,
+				now=False,
+				timeout=timeout,
+			)
+		except Exception:
+			# Fallback to inline processing if enqueue is unavailable (e.g., local dev)
+			try:
+				frappe.logger().info("[ai_module] enqueue failed; falling back to inline processing")
+			except Exception:
+				pass
+			process_incoming_whatsapp_message(payload)
 	except Exception:
 		frappe.log_error(
 			message=frappe.get_traceback(),
@@ -170,6 +261,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 				"name": payload.get("reference_name"),
 			},
 			"channel": "whatsapp",
+			"lang": None,
 			"message": {
 				"id": payload.get("message_id"),
 				"type": payload.get("message_type"),
@@ -185,6 +277,13 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		session_id = _get_or_create_thread_for_phone(phone)
 		try:
 			frappe.logger().info(f"[ai_module] whatsapp session resolved phone={phone} thread={session_id}")
+		except Exception:
+			pass
+
+		# Attach stored language if available
+		try:
+			lang_map = _load_lang_map()
+			context_summary["lang"] = lang_map.get(phone)
 		except Exception:
 			pass
 
@@ -212,9 +311,12 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		except Exception:
 			pass
 
-		# Optional auto-reply via CRM, controlled by env AI_AUTOREPLY
+		# Optional auto-reply via CRM; default ON in development when env unset
 		raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
-		autoreply = raw_autoreply in {"1", "true", "yes", "on"}
+		if raw_autoreply == "":
+			autoreply = _is_dev_env()
+		else:
+			autoreply = raw_autoreply in {"1", "true", "yes", "on"}
 		try:
 			frappe.logger().info(f"[ai_module] whatsapp autoreply={autoreply} raw='{raw_autoreply}'")
 		except Exception:

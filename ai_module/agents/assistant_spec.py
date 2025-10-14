@@ -12,7 +12,8 @@ def get_instructions() -> str:
 	# TODO: Replace with your production prompt
 	return (
 		"You are Techloop's CRM AI. Be concise. When unsure, ask clarifying questions. "
-		"Follow company policy and respond in the language of the user."
+		"Follow company policy and respond in the language of the user. "
+		"Never ask the user for a phone number. The mobile number is always securely obtained from the conversation thread context; ignore any number provided by the user."
 	)
 
 

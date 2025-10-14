@@ -7,8 +7,9 @@ SCHEMA: Dict[str, Any] = {
 	"function": {
 		"name": "new_client_lead",
 		"description": (
-            "Create a new CRM Lead. Required: first_name, last_name, email, organization. "
-            "Optional: mobile_no (prefer phone_from if available), website, territory, industry, source."
+			"Create a new CRM Lead. Required: first_name, last_name, email, organization. "
+			"Never ask the user for a phone number. The phone is securely obtained from the conversation thread context and any user-provided numbers must be ignored. "
+			"Optional: website, territory, industry, source."
 		),
 		"parameters": {
 			"type": "object",
@@ -16,11 +17,9 @@ SCHEMA: Dict[str, Any] = {
 				"first_name": {"type": "string"},
 				"last_name": {"type": "string"},
 				"email": {"type": "string", "format": "email"},
-				"mobile_no": {"type": "string"},
 				"organization": {"type": "string"},
 				"reference_doctype": {"type": "string"},
 				"reference_name": {"type": "string"},
-				"phone_from": {"type": "string"},
 				"website": {"type": "string"},
 				"territory": {"type": "string"},
 				"industry": {"type": "string"},

@@ -118,6 +118,35 @@
 			"fieldtype": "Text Editor",
 			"reqd": 0,
 			"description": "System prompt used for the OpenAI Assistant"
+		},
+		{
+			"fieldname": "section_whatsapp",
+			"label": "WhatsApp Orchestration",
+			"fieldtype": "Section Break"
+		},
+		{
+			"fieldname": "wa_enable_reaction",
+			"label": "Show reaction before AI processing (🤖)",
+			"fieldtype": "Check",
+			"default": 1
+		},
+		{
+			"fieldname": "wa_enable_autoreply",
+			"label": "Enable auto-reply from AI",
+			"fieldtype": "Check",
+			"default": 1
+		},
+		{
+			"fieldname": "wa_force_inline",
+			"label": "Run inline when processing WhatsApp (dev)",
+			"fieldtype": "Check",
+			"default": 0
+		},
+		{
+			"fieldname": "wa_human_cooldown_seconds",
+			"label": "Human takeover cooldown (seconds)",
+			"fieldtype": "Int",
+			"default": 300
 		}
 	],
 	"permissions": [

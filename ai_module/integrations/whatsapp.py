@@ -26,7 +26,7 @@ def _is_dev_env() -> bool:
 		if int(getattr(frappe.conf, "developer_mode", 0) or 0) == 1:
 			return True
 		url = str(frappe.utils.get_url() or "")
-		return url.startswith("http://localhost") or url.startswith("http://127.0.0.1")
+    return url.startswith("http://localhost") or url.startswith("http://127.0.0.1")
 	except Exception:
 		return False
 
@@ -62,6 +62,10 @@ def _thread_map_path() -> str:
 
 def _lang_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_lang.json")
+
+
+def _handoff_map_path() -> str:
+	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_handoff.json")
 
 
 def _load_thread_map() -> Dict[str, str]:
@@ -110,6 +114,78 @@ def _save_lang_map(mapping: Dict[str, str]) -> None:
 			f.write(json.dumps(mapping))
 	except Exception:
 		pass
+
+
+def _load_handoff_map() -> Dict[str, float]:
+	try:
+		path = _handoff_map_path()
+		import os, json  # noqa: WPS433
+		if not os.path.exists(path):
+			return {}
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			return json.loads(data) if data else {}
+	except Exception:
+		return {}
+
+
+def _save_handoff_map(mapping: Dict[str, float]) -> None:
+	try:
+		path = _handoff_map_path()
+		import os, json  # noqa: WPS433
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, "w", encoding="utf-8") as f:
+			f.write(json.dumps(mapping))
+	except Exception:
+		pass
+
+
+def _mark_human_activity(phone: str) -> None:
+	"""Record the time a human sent an outgoing message to this phone."""
+	try:
+		import time  # noqa: WPS433
+		key = (phone or "").strip()
+		if not key:
+			return
+		m = _load_handoff_map()
+		m[key] = float(time.time())
+		_save_handoff_map(m)
+	except Exception:
+		pass
+
+
+def _human_cooldown_seconds() -> int:
+	try:
+        # Prefer DocType override when enabled
+        sec = None
+        try:
+            doc = frappe.get_single("AI Assistant Settings")
+            if getattr(doc, "use_settings_override", 0):
+                sec = int(getattr(doc, "wa_human_cooldown_seconds", 0) or 0)
+        except Exception:
+            sec = None
+        if sec and sec > 0:
+            return int(sec)
+        val = (get_environment().get("AI_HUMAN_COOLDOWN_SECONDS") or "").strip()
+        return int(val) if str(val).isdigit() else 300
+	except Exception:
+		return 300
+
+
+def _is_human_active(phone: str) -> bool:
+	"""Return True if a human messaged this phone within the cooldown window."""
+	try:
+		import time  # noqa: WPS433
+		key = (phone or "").strip()
+		if not key:
+			return False
+		m = _load_handoff_map()
+		last_ts = float(m.get(key) or 0.0)
+		if last_ts <= 0:
+			return False
+		return (time.time() - last_ts) < _human_cooldown_seconds()
+	except Exception:
+		return False
 
 
 def _detect_language(text: str) -> str:
@@ -165,8 +241,28 @@ def on_whatsapp_after_insert(doc, method=None):
 	try:
 		# Ensure env is applied for worker context
 		apply_environment()
+		# Track human activity on outgoing messages and exit early
+		if (doc.type or "").lower() == "outgoing":
+			try:
+				_mark_human_activity(doc.get("to"))
+			except Exception:
+				pass
+			return
+
+		# Skip non-incoming messages and reactions
 		if not _is_incoming_message(doc) or _should_ignore(doc):
 			return
+
+		# If a human interacted recently, do not run AI
+		try:
+			if _is_human_active(doc.get("from")):
+				try:
+					frappe.logger().info("[ai_module] human active recently; skipping AI reply")
+				except Exception:
+					pass
+				return
+		except Exception:
+			pass
 
 		# Internal: ensure a Contact exists for this incoming phone (no external API)
 		try:
@@ -198,11 +294,19 @@ def on_whatsapp_after_insert(doc, method=None):
 		except Exception:
 			pass
 
-		# Inline processing: default to ON in development when env unset
+        # Inline processing: prefer DocType override; else default ON in dev when env unset
 		try:
-			env = get_environment()
-			raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
-			inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
+            env = get_environment()
+            raw_inline = (env.get("AI_WHATSAPP_INLINE") or "").strip().lower()
+            # DocType override
+            try:
+                doc_settings = frappe.get_single("AI Assistant Settings")
+                if getattr(doc_settings, "use_settings_override", 0):
+                    inline = bool(getattr(doc_settings, "wa_force_inline", 0))
+                else:
+                    inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
+            except Exception:
+                inline = raw_inline in {"1", "true", "yes", "on"} or (raw_inline == "" and _is_dev_env())
 			if inline:
 				try:
 					frappe.logger().info("[ai_module] whatsapp inline processing active; executing synchronously")
@@ -311,12 +415,16 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		except Exception:
 			pass
 
-		# Optional auto-reply via CRM; default ON in development when env unset
-		raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
-		if raw_autoreply == "":
-			autoreply = _is_dev_env()
-		else:
-			autoreply = raw_autoreply in {"1", "true", "yes", "on"}
+        # Optional auto-reply via CRM; prefer DocType override; default ON in dev when env unset
+        raw_autoreply = (env.get("AI_AUTOREPLY") or "").strip().lower()
+        try:
+            doc_settings = frappe.get_single("AI Assistant Settings")
+            if getattr(doc_settings, "use_settings_override", 0):
+                autoreply = bool(getattr(doc_settings, "wa_enable_autoreply", 0))
+            else:
+                autoreply = (_is_dev_env() if raw_autoreply == "" else raw_autoreply in {"1", "true", "yes", "on"})
+        except Exception:
+            autoreply = (_is_dev_env() if raw_autoreply == "" else raw_autoreply in {"1", "true", "yes", "on"})
 		try:
 			frappe.logger().info(f"[ai_module] whatsapp autoreply={autoreply} raw='{raw_autoreply}'")
 		except Exception:
@@ -330,7 +438,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			if reply_text:
 				try:
 					from crm.api.whatsapp import create_whatsapp_message
-					name = create_whatsapp_message(
+                    name = create_whatsapp_message(
 						payload.get("reference_doctype"),
 						payload.get("reference_name"),
 						reply_text,

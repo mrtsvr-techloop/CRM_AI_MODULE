@@ -34,6 +34,11 @@ class AIAssistantSettings(Document):
 		# If override is OFF, ensure assistant_id is cleared so it never persists
 		if not getattr(self, "use_settings_override", 0):
 			self.assistant_id = ""
+			# Reset orchestration toggles to reflect env (display only)
+			self.wa_enable_reaction = 0
+			self.wa_enable_autoreply = 0
+			self.wa_force_inline = 0
+			self.wa_human_cooldown_seconds = 300
 		# Always refresh display fields before save (no-op if override is on)
 		self._populate_readonly_from_env()
 

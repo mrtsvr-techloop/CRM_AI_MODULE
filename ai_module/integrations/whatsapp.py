@@ -330,7 +330,7 @@ def on_whatsapp_after_insert(doc, method=None):
 			pass
 
 		# Enqueue background job
-		queue_name = (get_environment().get("AI_WHATSAPP_QUEUE") or "long").strip() or "long"
+		queue_name = (get_environment().get("AI_WHATSAPP_QUEUE") or "default").strip() or "default"
 		try:
 			custom_timeout = get_environment().get("AI_WHATSAPP_TIMEOUT")
 			timeout = int(custom_timeout) if str(custom_timeout or "").strip().isdigit() else 180

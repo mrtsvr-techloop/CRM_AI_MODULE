@@ -60,7 +60,7 @@ Set these in Frappe Cloud → Site → Environment:
 
 - WhatsApp reply behavior:
   - `AI_AUTOREPLY`: one of `1,true,yes,on` to send automatic replies back to WhatsApp
-  - `AI_WHATSAPP_QUEUE`: background queue name for jobs (default `long`)
+- `AI_WHATSAPP_QUEUE`: background queue name for jobs (default `default`)
   - `AI_WHATSAPP_TIMEOUT`: background job timeout seconds (default `180`)
   - `AI_WHATSAPP_INLINE`: one of `1,true,yes,on` to run inline when no worker is available
   - `AI_HUMAN_COOLDOWN_SECONDS`: suppress AI replies for N seconds after a human sends an outgoing message (default `300`)

@@ -74,6 +74,24 @@ def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
 		from .tool_registry import get_tool_impl
 		impl = get_tool_impl(name)
 		result = impl(**args)
+		# If contact was updated/created, persist a lightweight profile for this thread phone
+		try:
+			if name == "update_contact" and isinstance(result, dict) and bool(result.get("success")):
+				from ai_module.integrations.whatsapp import _load_profile_map, _save_profile_map  # type: ignore
+				prof = {
+					"first_name": args.get("first_name"),
+					"last_name": args.get("last_name"),
+					"email": args.get("email"),
+					"organization": args.get("organization"),
+				}
+				# Resolve phone from thread map
+				phone = _lookup_phone_from_thread(thread_id) or ""
+				if phone:
+					m = _load_profile_map()
+					m[str(phone)] = prof
+					_save_profile_map(m)
+		except Exception:
+			pass
 		return json.dumps(result, default=str) if not isinstance(result, str) else result
 	except KeyError:
 		return json.dumps({"error": f"no_implementation_for_{name}"})

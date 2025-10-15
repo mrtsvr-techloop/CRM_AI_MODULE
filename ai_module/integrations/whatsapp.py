@@ -53,6 +53,10 @@ def _lang_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_lang.json")
 
 
+def _profile_map_path() -> str:
+	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_profile.json")
+
+
 def _handoff_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_handoff.json")
 
@@ -97,6 +101,30 @@ def _load_lang_map() -> Dict[str, str]:
 def _save_lang_map(mapping: Dict[str, str]) -> None:
 	try:
 		path = _lang_map_path()
+		import os, json  # noqa: WPS433
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, "w", encoding="utf-8") as f:
+			f.write(json.dumps(mapping))
+	except Exception:
+		pass
+
+
+def _load_profile_map() -> Dict[str, Dict[str, Any]]:
+	try:
+		path = _profile_map_path()
+		import os, json  # noqa: WPS433
+		if not os.path.exists(path):
+			return {}
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			return json.loads(data) if data else {}
+	except Exception:
+		return {}
+
+
+def _save_profile_map(mapping: Dict[str, Dict[str, Any]]) -> None:
+	try:
+		path = _profile_map_path()
 		import os, json  # noqa: WPS433
 		os.makedirs(os.path.dirname(path), exist_ok=True)
 		with open(path, "w", encoding="utf-8") as f:
@@ -392,6 +420,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 			},
 			"channel": "whatsapp",
 			"lang": None,
+			"profile": None,
 			"message": {
 				"id": payload.get("message_id"),
 				"type": payload.get("message_type"),
@@ -414,6 +443,12 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		try:
 			lang_map = _load_lang_map()
 			context_summary["lang"] = lang_map.get(phone)
+		except Exception:
+			pass
+		# Attach stored profile if available
+		try:
+			prof_map = _load_profile_map()
+			context_summary["profile"] = prof_map.get(phone)
 		except Exception:
 			pass
 

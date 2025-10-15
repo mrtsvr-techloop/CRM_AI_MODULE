@@ -6,207 +6,222 @@ from typing import Dict, Optional
 import frappe
 from frappe.utils.html_utils import clean_html
 
+# OpenAI environment keys
+OPENAI_API_KEY = "OPENAI_API_KEY"
+OPENAI_ORG_ID = "OPENAI_ORG_ID"
+OPENAI_PROJECT = "OPENAI_PROJECT"
+OPENAI_BASE_URL = "OPENAI_BASE_URL"
+
+
+def _log():
+	"""Get Frappe logger for config module."""
+	return frappe.logger("ai_module.config")
+
 
 def _get_frappe_environment() -> Dict[str, str]:
-	"""Return environment dict from frappe.conf.environment if present.
-
-	This leverages Frappe Cloud's Environment Variables GUI. Falls back to an
-	empty dict when not configured.
+	"""Get environment variables from Frappe configuration.
+	
+	Frappe Cloud allows setting environment variables via GUI which are
+	stored in frappe.conf.environment. This function extracts them with
+	fallback to empty dict if not configured.
+	
+	Returns:
+		Dict of environment variables (normalized to strings)
 	"""
-	# Some deployments expose as attribute, others via dict key access
+	# Try attribute access first (most common)
 	env_from_conf = getattr(frappe.conf, "environment", None)
+	
+	# Fallback to dict-style access for some deployments
 	if env_from_conf is None:
-		try:
-			env_from_conf = frappe.conf.get("environment")  # type: ignore[attr-defined]
-		except Exception:
-			env_from_conf = None
+		env_from_conf = getattr(frappe.conf, "get", lambda x: None)("environment")
+	
+	# Normalize to dict with string keys/values
 	if isinstance(env_from_conf, dict):
-		# Normalize keys to strings
 		return {str(k): str(v) for k, v in env_from_conf.items() if v is not None}
+	
 	return {}
 
 
-def get_environment() -> Dict[str, str]:
-	"""Merged environment with precedence: frappe.conf.environment -> os.environ.
-
-	We favor Frappe's environment (set via Frappe Cloud UI) so you can configure
-	secrets without code changes. Missing keys fall back to process env.
+def _get_ai_settings():
+	"""Get AI Assistant Settings singleton if available.
+	
+	Returns None if DocType is not installed or not accessible.
 	"""
-	merged: Dict[str, str] = {}
-	merged.update(os.environ)
-	merged.update(_get_frappe_environment())
-
-	# Overlay from DocType when user opted-in to use settings
 	try:
-		# Import inside function to avoid circular imports at module load
-		doc = frappe.get_single("AI Assistant Settings")
-		use_settings = bool(getattr(doc, "use_settings_override", 0))
-		if use_settings:
-			overrides: Dict[str, str] = {}
-			# Securely read password field
-			try:
-				from frappe.utils.password import get_decrypted_password
-				api_key = (
-					get_decrypted_password(
-						"AI Assistant Settings",
-						"AI Assistant Settings",
-						"api_key",
-						raise_exception=False,
-					)
-					or ""
-				).strip()
-				if api_key:
-					overrides["OPENAI_API_KEY"] = api_key
-			except Exception:
-				pass
-			# Optional provider configuration
-			for key, val in (
-				("OPENAI_BASE_URL", getattr(doc, "base_url", "")),
-				("OPENAI_ORG_ID", getattr(doc, "org_id", "")),
-				("OPENAI_PROJECT", getattr(doc, "project", "")),
-				("AI_ASSISTANT_NAME", getattr(doc, "assistant_name", "")),
-				("AI_ASSISTANT_MODEL", getattr(doc, "model", "")),
-			):
-				val_str = (val or "").strip()
-				if val_str:
-					overrides[key] = val_str
-			merged.update(overrides)
+		return frappe.get_single("AI Assistant Settings")
 	except Exception:
-		# Ignore if DocType not installed or not accessible in this context
-		pass
+		return None
 
+
+def _get_decrypted_api_key() -> Optional[str]:
+	"""Securely retrieve the decrypted OpenAI API key from settings.
+	
+	Returns:
+		API key string or None if not set/accessible
+	"""
+	try:
+		from frappe.utils.password import get_decrypted_password
+		
+		api_key = get_decrypted_password(
+			"AI Assistant Settings",
+			"AI Assistant Settings",
+			"api_key",
+			raise_exception=False,
+		)
+		return (api_key or "").strip() or None
+	except Exception:
+		return None
+
+
+def _get_settings_overrides() -> Dict[str, str]:
+	"""Extract environment overrides from AI Assistant Settings DocType.
+	
+	Only returns overrides if use_settings_override flag is enabled.
+	Includes API key, base URL, org ID, project, assistant name/model.
+	
+	Returns:
+		Dict of environment variable overrides
+	"""
+	settings = _get_ai_settings()
+	if not settings or not getattr(settings, "use_settings_override", 0):
+		return {}
+	
+	overrides: Dict[str, str] = {}
+	
+	# API key (encrypted field)
+	api_key = _get_decrypted_api_key()
+	if api_key:
+		overrides[OPENAI_API_KEY] = api_key
+	
+	# Optional provider configuration fields
+	field_mapping = {
+		OPENAI_BASE_URL: "base_url",
+		OPENAI_ORG_ID: "org_id",
+		OPENAI_PROJECT: "project",
+		"AI_ASSISTANT_NAME": "assistant_name",
+		"AI_ASSISTANT_MODEL": "model",
+	}
+	
+	for env_key, field_name in field_mapping.items():
+		value = (getattr(settings, field_name, "") or "").strip()
+		if value:
+			overrides[env_key] = value
+	
+	return overrides
+
+
+def get_environment() -> Dict[str, str]:
+	"""Get merged environment variables from all sources.
+	
+	Precedence order (later overrides earlier):
+	1. OS environment variables (os.environ)
+	2. Frappe Cloud environment (frappe.conf.environment)
+	3. AI Assistant Settings DocType (if use_settings_override enabled)
+	
+	This allows configuration via Frappe Cloud GUI or DocType without
+	code changes, with DocType having highest priority for flexibility.
+	
+	Returns:
+		Dict of all environment variables
+	"""
+	# Start with OS environment
+	merged: Dict[str, str] = dict(os.environ)
+	
+	# Override with Frappe-specific environment
+	merged.update(_get_frappe_environment())
+	
+	# Override with DocType settings (highest priority)
+	merged.update(_get_settings_overrides())
+	
 	return merged
 
 
 def apply_environment() -> None:
-    """Apply minimal OpenAI environment variables.
-
-    Only sets keys required for OpenAI Threads usage.
-    Supported keys:
-    - OPENAI_API_KEY (required)
-    - OPENAI_ORG_ID (optional)
-	- OPENAI_PROJECT (optional)
-	- OPENAI_BASE_URL (optional)
-    """
-    env = get_environment()
-    for key in (
-        "OPENAI_API_KEY",
-        "OPENAI_ORG_ID",
-		"OPENAI_PROJECT",
-		"OPENAI_BASE_URL",
-    ):
-        val = env.get(key)
-        if val:
-            os.environ[key] = val
-
-
- # Removed: local default model handling; Threads uses AI_ASSISTANT_MODEL
-
-
- # Removed: session DB path; not used when forcing OpenAI Threads
-
-
- # Removed: session mode; we always use OpenAI Threads
-
-
-def _assistant_id_file_path() -> Optional[str]:
-	try:
-		return frappe.utils.get_site_path("private", "files", "ai_assistant_id.txt")
-	except Exception:
-		return None
-
-
-def set_persisted_assistant_id(assistant_id: str) -> None:
-	"""Persist assistant id in private files for later reuse."""
-	path = _assistant_id_file_path()
-	if not path:
-		return
-	try:
-		# Ensure directory exists
-		dirpath = os.path.dirname(path)
-		os.makedirs(dirpath, exist_ok=True)
-		with open(path, "w", encoding="utf-8") as f:
-			f.write(assistant_id.strip())
-	except Exception:
-		# Best-effort; ignore persistence failures
-		pass
-
-
-def _get_persisted_assistant_id() -> Optional[str]:
-	path = _assistant_id_file_path()
-	if not path:
-		return None
-	try:
-		if os.path.exists(path):
-			with open(path, "r", encoding="utf-8") as f:
-				val = f.read().strip()
-				return val or None
-	except Exception:
-		return None
-	return None
-
-
-def get_openai_assistant_id() -> Optional[str]:
-	"""Assistant ID resolution with Doctype override flag.
-
-	Order of precedence:
-	1) If DocType flag `use_settings_override` is enabled AND assistant_id is set, use it
-	2) AI_OPENAI_ASSISTANT_ID from environment
-	3) persisted file under private/files
+	"""Apply OpenAI environment variables to the process.
+	
+	Extracts OpenAI-specific keys from merged environment and sets them
+	in os.environ so the OpenAI SDK can use them. Only sets keys that
+	have non-empty values.
+	
+	Required keys:
+	- OPENAI_API_KEY (required for API access)
+	
+	Optional keys:
+	- OPENAI_ORG_ID (for organization-specific API)
+	- OPENAI_PROJECT (for project-specific API)
+	- OPENAI_BASE_URL (for custom API endpoints)
 	"""
-	try:
-		doc = frappe.get_single("AI Assistant Settings")
-		if getattr(doc, "use_settings_override", 0):
-			dt_val = (getattr(doc, "assistant_id", None) or "").strip()
-			if dt_val:
-				return dt_val
-	except Exception:
-		pass
-	env_val = get_environment().get("AI_OPENAI_ASSISTANT_ID")
-	if env_val:
-		return env_val
-	return _get_persisted_assistant_id()
+	env = get_environment()
+	
+	# Apply OpenAI-specific environment variables
+	openai_keys = [OPENAI_API_KEY, OPENAI_ORG_ID, OPENAI_PROJECT, OPENAI_BASE_URL]
+	
+	for key in openai_keys:
+		value = env.get(key)
+		if value:
+			os.environ[key] = value
 
 
 def get_settings_prompt_only() -> Optional[str]:
-	"""Return plain-text prompt/instructions from the DocType when allowed by flag.
-
-	When `use_settings_override` is disabled, returns None so that env takes precedence.
+	"""Get AI instructions/prompt from DocType settings.
+	
+	Only returns instructions if use_settings_override flag is enabled,
+	otherwise returns None to allow environment variables to take precedence.
+	Converts HTML instructions to plain text.
+	
+	Returns:
+		Plain-text instructions or None
 	"""
-	try:
-		doc = frappe.get_single("AI Assistant Settings")
-		if not getattr(doc, "use_settings_override", 0):
-			return None
-		instr_html = doc.instructions or ""
-		instr = clean_html(instr_html).strip()
-		return instr or None
-	except Exception:
+	settings = _get_ai_settings()
+	if not settings or not getattr(settings, "use_settings_override", 0):
 		return None
+	
+	# Extract and clean HTML instructions
+	instructions_html = getattr(settings, "instructions", "") or ""
+	instructions_text = clean_html(instructions_html).strip()
+	
+	return instructions_text or None
 
 
 def get_env_assistant_spec() -> Optional[Dict[str, str]]:
-	"""Return name/model/instructions from env when DocType override is disabled.
-
-	- If DocType flag is ON, we consider only DocType values (env ignored for these).
-	- If flag is OFF, use env for name/model and optionally instructions via AI_INSTRUCTIONS.
+	"""Get assistant specification from environment variables.
+	
+	Only returns environment-based spec when DocType override is disabled.
+	When override is enabled, returns None to indicate DocType should be used.
+	
+	Extracts:
+	- AI_ASSISTANT_NAME: Assistant name
+	- AI_ASSISTANT_MODEL: Model to use (e.g., gpt-4)
+	- AI_INSTRUCTIONS or AI_ASSISTANT_INSTRUCTIONS: Instructions/prompt
+	
+	Returns:
+		Dict with name/model/instructions keys, or None if override enabled
 	"""
+	# Skip if DocType override is active
+	settings = _get_ai_settings()
+	if settings and getattr(settings, "use_settings_override", 0):
+		return None
+	
+	# Extract from environment
 	env = get_environment()
-	try:
-		doc = frappe.get_single("AI Assistant Settings")
-		if getattr(doc, "use_settings_override", 0):
-			return None
-	except Exception:
-		pass
 	name = env.get("AI_ASSISTANT_NAME")
 	model = env.get("AI_ASSISTANT_MODEL")
-	instr = (env.get("AI_INSTRUCTIONS") or env.get("AI_ASSISTANT_INSTRUCTIONS") or "").strip()
-	if name or model or instr:
-		data: Dict[str, str] = {}
-		if name:
-			data["name"] = name
-		if model:
-			data["model"] = model
-		if instr:
-			data["instructions"] = instr
-		return data
-	return None
+	instructions = (
+		env.get("AI_INSTRUCTIONS") or 
+		env.get("AI_ASSISTANT_INSTRUCTIONS") or 
+		""
+	).strip()
+	
+	# Return spec only if at least one value exists
+	if not (name or model or instructions):
+		return None
+	
+	spec: Dict[str, str] = {}
+	if name:
+		spec["name"] = name
+	if model:
+		spec["model"] = model
+	if instructions:
+		spec["instructions"] = instructions
+	
+	return spec

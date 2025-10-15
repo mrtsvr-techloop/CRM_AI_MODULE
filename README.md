@@ -1,170 +1,415 @@
-### ai-module
+# AI Module for Frappe
 
-Un modulo sviluppato daTechloop che permette l'integrazione di modelli LLM nel environment Frappe
+> Modern AI integration module for Frappe using OpenAI Responses API
 
-### Installation
+Un modulo sviluppato da Techloop che permette l'integrazione di modelli LLM nel framework Frappe, utilizzando la moderna **OpenAI Responses API** (non la deprecata Assistants API).
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
+## 🚀 Features
+
+- ✅ **Modern Responses API** - Usa l'API OpenAI più recente, non deprecata
+- ✅ **Zero HTTP overhead** - Integrazione diretta Python tra app
+- ✅ **Conversation continuity** - Mantiene il contesto tra messaggi con `previous_response_id`
+- ✅ **Function calling** - L'AI può chiamare funzioni Python del tuo CRM
+- ✅ **Multi-language support** - Rilevamento automatico lingua per conversazioni
+- ✅ **Security-first** - Dati sensibili (phone) mai inviati a OpenAI
+- ✅ **WhatsApp integration** - Auto-risposta messaggi WhatsApp via CRM
+- ✅ **Frappe Cloud ready** - Configurabile via environment variables
+
+## 📦 Installation
+
+Installa l'app usando [bench](https://github.com/frappe/bench):
 
 ```bash
 cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch develop
+bench get-app https://github.com/your-repo/ai_module --branch develop
 bench install-app ai_module
 ```
 
-### Configuration (Frappe Cloud / Environment)
+## ⚙️ Configuration
 
-Set these keys in the Frappe Cloud Environment (Site Config > Environment):
+### Opzione 1: Environment Variables (Frappe Cloud)
 
-- OPENAI_API_KEY: your OpenAI (or compatible) API key
-- OPENAI_BASE_URL: optional, for Azure or compatible endpoints
-- OPENAI_ORG_ID: optional
-- OPENAI_PROJECT: optional
-- AI_DEFAULT_MODEL: optional, defaults to `gpt-4o-mini`
-- AI_SESSION_DB: optional SQLite path for session memory (defaults to sites/<site>/private/files/ai_sessions.db)
-- AI_SESSION_MODE: optional, defaults to `openai_threads` (set to `local` to use SDK loop without vendor-side persistence)
-- AI_OPENAI_ASSISTANT_ID: required when `AI_SESSION_MODE=openai_threads`
-- AI_ASSISTANT_NAME: required to auto-create an Assistant (threads mode)
-- AI_ASSISTANT_MODEL: required to auto-create an Assistant (threads mode)
-- AI_ASSISTANT_INSTRUCTIONS: ignored; instructions (prompt) are defined in code
+Imposta queste variabili in **Site Config → Environment**:
 
-No frontend is required. The module applies environment on every request/job automatically.
+```bash
+# Required
+OPENAI_API_KEY=sk-...
 
-### What this module does (plain English)
+# Optional - OpenAI Configuration
+OPENAI_BASE_URL=https://api.openai.com/v1  # Per Azure o endpoint custom
+OPENAI_ORG_ID=org-...
+OPENAI_PROJECT=proj_...
 
-- What it is
-  - A backend-only AI module that talks to OpenAI for you, remembers conversations safely, and can “do things” inside your CRM (like create a lead) when the AI decides to.
+# Optional - AI Configuration
+AI_ASSISTANT_MODEL=gpt-4o-mini  # Default model
+AI_ASSISTANT_NAME=CRM Assistant  # Nome assistant per log
+AI_INSTRUCTIONS="You are a helpful CRM assistant"  # Istruzioni custom
+```
 
-- How it works
-  - You set secrets and basic settings (like model name and assistant name) in the environment. No UI needed.
-  - You write the AI’s “brain” (the prompt) in code. That’s the personality and rules it follows.
-  - The first time a message comes in, the module auto-creates your AI assistant on OpenAI using:
-    - Name and model from the environment
-    - Instructions (prompt) and available actions (“tools”) from your code
-  - Each person’s chat continues in a private OpenAI “thread,” so the AI remembers context.
-  - When the AI needs to perform a CRM action (e.g., create a lead), it calls a “tool.” We map that tool to your real CRM function and run it on your server, then send the result back to the AI.
+### Opzione 2: AI Assistant Settings DocType
 
-- Why it’s safe and simple
-  - No external HTTP hops between your apps; calls are internal.
-  - Secrets stay in environment settings.
-  - You control the AI’s behavior (prompt) and what it’s allowed to do (tools) in code.
+Abilita l'override da UI:
 
-- How you add new actions
-  - Create a small file for each action under `ai_module/ai_module/agents/tools/` that tells the AI “what this action is and what info it needs” (the schema), and point it to the real Python function that does the work.
-  - The module auto-loads these files; no extra wiring.
+1. Vai a **AI Assistant Settings**
+2. Spunta **Use Settings Override**
+3. Configura:
+   - **API Key** (campo criptato)
+   - **Model** (es. `gpt-4o-mini`)
+   - **Instructions** (prompt per l'AI)
+   - Base URL, Org ID, Project (opzionale)
 
-- How other apps use it
-  - They send a message to the module and get back the AI’s reply.
-  - On the first message, the assistant is created automatically; afterward, it’s reused.
-  - If the user keeps chatting, we pass the same thread id so the AI remembers the context.
+**Precedenza configurazione:**
+```
+OS Environment < Frappe Cloud Env < AI Assistant Settings DocType
+                                    (quando use_settings_override = 1)
+```
 
-### Python API (internal)
+## 🏗️ Architecture
 
-The module provides a lightweight integration layer on top of the [OpenAI Agents SDK](https://github.com/openai/openai-agents-python):
+### Come funziona (spiegazione semplice)
 
-- Registry for tools and agents
-- Session memory (SQLite) based on env
-- Convenience runners
+1. **Nessun Assistant da creare** - Con la Responses API moderna, non serve più creare/gestire oggetti Assistant
+2. **Configurazione per-call** - Model, instructions e tools vengono passati ad ogni chiamata
+3. **Persistenza conversazioni** - Usa `previous_response_id` per mantenere il contesto
+4. **Sicurezza phone mapping** - I numeri di telefono sono mappati localmente a session_id
 
-Minimal example within another app (e.g. `techloop_crm`):
+### Flusso WhatsApp → AI → WhatsApp
+
+```
+1. Messaggio WhatsApp ricevuto
+   ↓
+2. DocEvent trigger (after_insert)
+   ↓
+3. Mapping sicuro: Phone → Session ID (locale)
+   ↓
+4. AI Responses API call
+   ├─ Input: message + instructions + tools
+   ├─ Context: previous_response_id (se esiste)
+   └─ Output: risposta + nuovo response_id
+   ↓
+5. Salvataggio: Session ID → Response ID (per prossimo turno)
+   ↓
+6. Auto-reply (se abilitato)
+   └─ Invio risposta via CRM (Python diretto, no HTTP)
+```
+
+### Security - Phone Number Protection
 
 ```python
-# in your app's boot or startup
+# ✅ SICURO - Il phone non esce mai dal server
+Phone: +393331234567
+  ↓
+File locale: ai_whatsapp_threads.json
+  {
+    "+393331234567": "session_1729012345678"
+  }
+  ↓
+OpenAI riceve SOLO: session_id
+  ↓
+OpenAI NON vede MAI il numero di telefono reale
+```
+
+## 🛠️ Python API
+
+### Basic Usage
+
+```python
 import frappe
 from ai_module import api as ai_api
 
-# Register a tool (by dotted path)
-ai_api.ai_register_tool("techloop_crm.crm.api.activities.create_activity")
-
-# Create an agent with the tool
-ai_api.ai_register_agent(
-	name="crm_helper",
-	instructions="You are a helpful CRM assistant. Be concise.",
-	tool_names=["create_activity"],
+# Run the default agent
+result = ai_api.ai_run_agent(
+    agent_name="crm_ai",
+    message="Create a contact for John Doe, email john@example.com",
+    session_id=frappe.session.user  # For conversation continuity
 )
 
-# Run the agent somewhere in your code
-result = ai_api.ai_run_agent("crm_helper", message="Schedule a call with ACME tomorrow 10am", session_id=frappe.session.user)
-print(result["final_output"])  # agent's final response
+print(result["final_output"])  # AI's response
+print(result["thread_id"])     # Session ID for next turn
+print(result["model"])          # Model used
 ```
 
-Alternatively, build agents directly using the SDK and register them:
+### Custom Agent with Tools
 
 ```python
+from ai_module.agents import register_tool, register_agent, run_agent_sync
 from agents import Agent
-from ai_module.ai_module.agents import register_agent, register_tool, run_agent_sync
 
+# Define a custom tool
 @register_tool
-def sum_values(a: int, b: int) -> int:
-	return a + b
+def calculate_discount(price: float, percentage: float) -> float:
+    """Calculate discount amount."""
+    return price * (percentage / 100)
 
+# Create and register agent
 agent = Agent(
-	name="math_bot",
-	instructions="Use tools if helpful.",
-	tools=[sum_values],
+    name="sales_bot",
+    instructions="You help calculate discounts. Be precise.",
+    tools=[calculate_discount],
 )
-register_agent(agent, name="math_bot")
+register_agent(agent, name="sales_bot")
 
-print(run_agent_sync("math_bot", "What is 2+3?", session_id="user_123"))
+# Use the agent
+response = run_agent_sync(
+    "sales_bot",
+    "What's 20% discount on $100?",
+    session_id="user_123"
+)
+print(response)  # "$20.00"
 ```
 
-### Tracing and Sessions
+### Register External Tool
 
-- Sessions: enabled when `session_id` is provided and session DB is available.
-- Tracing: use the Agents SDK configuration to integrate with providers.
+```python
+# Register a tool from your CRM app
+ai_api.ai_register_tool("techloop_crm.api.activities.create_activity")
 
-### Contributing
+# Use it in an agent
+ai_api.ai_register_agent(
+    name="crm_helper",
+    instructions="You help manage CRM activities.",
+    tool_names=["create_activity"],
+)
+```
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+## 📱 WhatsApp Integration
+
+### How It Works
+
+1. **Messaggio in arrivo** - WhatsApp Message (Incoming) creato nel DB
+2. **Hook trigger** - `on_whatsapp_after_insert` in `integrations/whatsapp.py`
+3. **Phone mapping** - Phone → Session ID (file JSON locale)
+4. **AI processing** - Chiamata Responses API con contesto
+5. **Auto-reply** - Risposta inviata via `crm.api.whatsapp.create_whatsapp_message`
+
+### Environment Variables
+
+```bash
+# WhatsApp Behavior
+AI_AUTOREPLY=true              # Enable auto-reply (default: false)
+AI_AGENT_NAME=crm_ai           # Agent to use (default: crm_ai)
+
+# Processing Mode
+AI_WHATSAPP_INLINE=false       # false=background job, true=inline (default: false)
+AI_WHATSAPP_QUEUE=default      # Queue name (default: default)
+AI_WHATSAPP_TIMEOUT=180        # Job timeout in seconds (default: 180)
+
+# Human Handoff
+AI_HUMAN_COOLDOWN_SECONDS=300  # Pause AI after human message (default: 300)
+```
+
+### DocType Settings Override
+
+Oppure configura via **AI Assistant Settings**:
+
+- ✅ **Enable Autoreply** (`wa_enable_autoreply`)
+- ✅ **Force Inline Processing** (`wa_force_inline`)
+- ✅ **Human Cooldown Seconds** (`wa_human_cooldown_seconds`)
+
+### Features Automatiche
+
+- ✅ **Language detection** - Rileva e memorizza la lingua dell'utente
+- ✅ **Contact auto-creation** - Crea Contact automaticamente per nuovi phone
+- ✅ **Human takeover** - Pausa AI se un umano interviene
+- ✅ **Security** - Phone number mai esposto a OpenAI
+- ✅ **Conversation context** - Mantiene lo storico via `previous_response_id`
+
+## 🔧 Creating Custom Tools
+
+### Step 1: Create Tool File
+
+Crea `ai_module/agents/tools/my_tool.py`:
+
+```python
+"""Tool for doing something useful."""
+
+from typing import Dict, Any
+
+def my_tool_impl(param1: str, param2: int) -> Dict[str, Any]:
+    """Implementation of my tool.
+    
+    Args:
+        param1: Description of param1
+        param2: Description of param2
+    
+    Returns:
+        Dict with success status and result
+    """
+    # Your implementation here
+    result = f"Processed {param1} with {param2}"
+    
+    return {
+        "success": True,
+        "result": result
+    }
+
+
+# Tool schema for OpenAI
+SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "my_tool",
+        "description": "Does something useful with parameters",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "param1": {
+                    "type": "string",
+                    "description": "First parameter"
+                },
+                "param2": {
+                    "type": "integer",
+                    "description": "Second parameter"
+                }
+            },
+            "required": ["param1", "param2"]
+        }
+    }
+}
+
+# Implementation reference
+IMPL_FUNC = my_tool_impl
+```
+
+### Step 2: Auto-loading
+
+Il tool viene caricato automaticamente! Il sistema:
+1. Scansiona `agents/tools/*.py`
+2. Carica `SCHEMA` per le definizioni
+3. Registra `IMPL_FUNC` per le esecuzioni
+
+## 📊 File Persistence
+
+Il modulo salva dati localmente in `sites/<site>/private/files/`:
+
+```
+ai_whatsapp_threads.json     # Phone → Session ID mapping
+ai_whatsapp_responses.json   # Session → Response ID mapping
+ai_whatsapp_lang.json        # Phone → Detected language
+ai_whatsapp_handoff.json     # Phone → Last human activity timestamp
+ai_whatsapp_profile.json     # Phone → User profile cache
+```
+
+**Tutti questi file sono:**
+- ✅ Privati (non accessibili da web)
+- ✅ Sicuri (no phone numbers in OpenAI)
+- ✅ Backuppabili (con il site backup)
+
+## 🔍 Logging and Debugging
+
+Tutti i log usano `frappe.logger()` per visibilità in **bench console**:
+
+```bash
+# Durante sviluppo, watch i log:
+tail -f logs/frappe.log | grep ai_module
+
+# Oppure in bench start:
+bench start
+```
+
+Esempio output:
+
+```
+INFO ai_module.whatsapp: Received WhatsApp message: name=WHATSAPP-MSG-0001
+INFO ai_module.threads: AI request: message_len=45 session=session_1729016216789
+INFO ai_module.threads: AI response: text_len=234 session=session_1729016216789
+INFO ai_module.whatsapp: Created outbound message: WHATSAPP-MSG-0002
+```
+
+## 🧪 Development
+
+### Pre-commit Hooks
+
+Usa `pre-commit` per linting automatico:
 
 ```bash
 cd apps/ai_module
 pre-commit install
 ```
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+Tools configurati:
+- ✅ **ruff** - Python linting
+- ✅ **pyupgrade** - Python syntax upgrade
+- ✅ **eslint** - JavaScript linting
+- ✅ **prettier** - Code formatting
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
+### Running Tests
 
-### License
+```bash
+# Run all tests
+bench --site your-site run-tests --app ai_module
 
-unlicense
+# Run specific test
+bench --site your-site run-tests --app ai_module --module ai_module.tests.test_threads
+```
 
-### WhatsApp → AI auto-reply (no HTTP)
+## 🏗️ Code Structure
 
-Goal: respond via AI to a WhatsApp message received in the CRM without any HTTP hop between apps.
+```
+ai_module/
+├── agents/
+│   ├── tools/              # AI function calling tools
+│   │   ├── new_client_lead.py
+│   │   └── update_contact.py
+│   ├── bootstrap.py        # System initialization
+│   ├── config.py           # Configuration management
+│   ├── registry.py         # Tool/Agent registry
+│   ├── runner.py           # Agent execution
+│   ├── threads.py          # Responses API implementation
+│   ├── assistant_spec.py   # AI instructions and tools
+│   └── assistant_update.py # Config retrieval helpers
+├── integrations/
+│   └── whatsapp.py         # WhatsApp integration
+├── api.py                  # Public Python API
+├── hooks.py                # Frappe hooks
+└── install.py              # Installation hooks
+```
 
-What happens
-- Incoming `WhatsApp Message` (created by your webhook integration or CRM) triggers an AI-side listener.
-- The AI module forwards the message to the configured AI agent via Python import, not HTTP.
-- Session/thread persistence by sender phone ensures context continuity across messages.
-- Optional: the AI’s reply is sent back as an Outgoing `WhatsApp Message` via direct Python call into the CRM (still no HTTP).
+## 🆚 Migration from Assistants API
 
-Where the logic lives
-- Listener hook: `ai_module/ai_module/hooks.py` (`doc_events` → `WhatsApp Message.after_insert`).
-- Handler: `ai_module/ai_module/integrations/whatsapp.py`.
-  - Filters: only Incoming and non-reaction messages.
-  - Builds a structured payload for the AI (text, content_type, attachments, reference doc, etc.).
-  - Determines the session strategy from env and persists threads when using OpenAI threads.
-  - Invokes `ai_module.api.ai_run_agent(...)` directly.
-  - If enabled by env, posts an Outgoing reply using CRM’s `create_whatsapp_message` (Python import; no HTTP).
+Se stai aggiornando dalla vecchia Assistants API:
 
-Environment variables
-- `AI_AGENT_NAME` (string): which registered agent to run (default: `crm_ai`).
-- `AI_SESSION_MODE` (string): `openai_threads` (default) or `local`.
-  - `openai_threads`: the listener maps the sender phone to a persistent OpenAI `thread_id` stored at `sites/<site>/private/files/ai_whatsapp_threads.json`.
-  - `local`: the listener uses `session_id = whatsapp:<sender_phone>`.
-- `AI_AUTOREPLY` (bool-like): when true (`1/true/yes/on`), the AI’s final output is automatically sent back as an Outgoing WhatsApp message via CRM’s `create_whatsapp_message`.
-- Standard OpenAI env (see earlier section): `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT`, `AI_OPENAI_ASSISTANT_ID`, `AI_ASSISTANT_NAME`, `AI_ASSISTANT_MODEL`.
+### ❌ Rimosso (deprecato)
+- `client.beta.assistants.create()`
+- `client.beta.assistants.update()`
+- `threads.messages.create()`
+- `threads.runs.create()`
+- File persistence `ai_assistant_id.txt`
+- Funzione `ensure_openai_assistant()`
 
-Reply mechanism (no duplication)
-- The AI module does not duplicate CRM logic. It imports and calls the CRM sender (`crm.api.whatsapp.create_whatsapp_message`) so all validations, realtime updates, and notifications continue to work as before.
-- The listener ignores non-Incoming messages, so auto-replies won’t loop back into the AI.
+### ✅ Nuovo (Responses API)
+- `client.responses.create()` - singola chiamata per tutto
+- `previous_response_id` - per continuità conversazione
+- Configurazione passata per-call (model, instructions, tools)
+- Nessun oggetto Assistant da gestire
 
-Operational notes
-- If your WhatsApp webhook is provided by another app (e.g., `frappe_whatsapp`), keep using it. The AI listener triggers on document insert and remains provider-agnostic.
-- Media messages are forwarded to the AI with metadata; if no text is present, a short placeholder like `[non-text:image]` is sent alongside args so agents can reason on context.
-- Thread persistence file (`ai_whatsapp_threads.json`) is stored under the site’s private files; it can be safely backed up with the site.
+### 📝 Stesso Flusso Funzionale
+Il **mapping phone → session** è **identico**, quindi:
+- ✅ Sicurezza invariata (phone mai esposto)
+- ✅ Persistenza conversazioni invariata
+- ✅ WhatsApp integration invariata
+
+## 📚 Additional Resources
+
+- [OpenAI Responses API Docs](https://platform.openai.com/docs/api-reference/responses/create)
+- [OpenAI Migration Guide](https://platform.openai.com/docs/guides/migrate-to-responses)
+- [Frappe Framework Docs](https://frappeframework.com/docs)
+
+## 📄 License
+
+Unlicense - Free to use, modify, and distribute.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Follow the code style (pre-commit hooks)
+4. Write tests for new features
+5. Submit a pull request
+
+## 💬 Support
+
+Per supporto:
+- GitHub Issues: [Report a bug](https://github.com/your-repo/ai_module/issues)
+- Documentation: Vedi `AI_WHATSAPP_REPLY_MODES.md` per dettagli WhatsApp

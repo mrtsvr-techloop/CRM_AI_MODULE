@@ -8,22 +8,11 @@ from openai import OpenAI
 import frappe
 
 
-def _ensure_thread_id(session_id: Optional[str], client: OpenAI) -> str:
-	"""Return a valid thread_id.
-
-	- If a session_id looks like a thread id, verify it exists; if not, create a new thread.
-	- If no valid session_id is provided, create a new thread.
-	"""
-	if session_id and session_id.startswith("thread_"):
-		try:
-			# Verify the thread exists
-			client.beta.threads.retrieve(thread_id=session_id)
-			return session_id
-		except Exception:
-			pass
-	# Create a new thread if none exists or verification failed
-	thread = client.beta.threads.create()
-	return thread.id
+def _ensure_thread_id(session_id: Optional[str]) -> str:
+	"""Return a stable logical session id (no vendor thread objects)."""
+	if session_id:
+		return session_id
+	return f"session_{int(time.time() * 1000)}"
 
 
 def _lookup_phone_from_thread(thread_id: str) -> Optional[str]:
@@ -42,6 +31,34 @@ def _lookup_phone_from_thread(thread_id: str) -> Optional[str]:
 		return None
 	except Exception:
 		return None
+
+
+def _responses_map_path() -> str:
+	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_responses.json")
+
+
+def _load_responses_map() -> Dict[str, str]:
+	try:
+		path = _responses_map_path()
+		import os, json as _json  # noqa: WPS433
+		if not os.path.exists(path):
+			return {}
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			return _json.loads(data) if data else {}
+	except Exception:
+		return {}
+
+
+def _save_responses_map(mapping: Dict[str, str]) -> None:
+	try:
+		path = _responses_map_path()
+		import os, json as _json  # noqa: WPS433
+		os.makedirs(os.path.dirname(path), exist_ok=True)
+		with open(path, "w", encoding="utf-8") as f:
+			f.write(_json.dumps(mapping))
+	except Exception:
+		pass
 
 
 def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
@@ -106,14 +123,13 @@ def run_with_openai_threads(
 	timeout_s: int = 120,
 	poll_interval_s: float = 0.75,
 ) -> Dict[str, Any]:
-	"""Send a user message via OpenAI Assistants Threads and return the assistant reply.
+	"""Use Responses API (latest) with previous_response_id; preserve signature."""
+	from .assistant_update import get_current_instructions
+	from .assistant_spec import get_assistant_tools
+	from .config import get_environment
 
-	- session_id: may be a thread_id (starting with "thread_"). If None or not a thread, a new thread is created.
-	- assistant_id: the target OpenAI Assistant to run (configure this in env and create it via the OpenAI UI or API).
-	- Returns dict with final_output (text), thread_id, assistant_id.
-	"""
 	client = OpenAI()
-	thread_id = _ensure_thread_id(session_id, client)
+	thread_id = _ensure_thread_id(session_id)
 
 	# Before sending to AI
 	try:
@@ -130,82 +146,72 @@ def run_with_openai_threads(
 	except Exception:
 		pass
 
-	client.beta.threads.messages.create(
-		thread_id=thread_id,
-		role="user",
-		content=message,
-	)
+	instr = (get_current_instructions() or "").strip()
+	inputs: list[Dict[str, Any]] = []
+	if instr:
+		inputs.append({"role": "system", "content": [{"type": "text", "text": instr}]})
+	inputs.append({"role": "user", "content": [{"type": "text", "text": message}]})
 
-	run = client.beta.threads.runs.create(
-		thread_id=thread_id,
-		assistant_id=assistant_id,
-	)
+	tools = get_assistant_tools() or []
+	model = get_environment().get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
 
+	resp_map = _load_responses_map()
+	prev_id = resp_map.get(thread_id)
+
+	final_text = ""
 	start = time.time()
-	status = None
-	while True:
-		r = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-		status = r.status
-		# While waiting
+	max_iters = 6
+	for _ in range(max_iters):
+		kwargs: Dict[str, Any] = {"model": model, "input": inputs, "tools": tools}
+		if prev_id:
+			kwargs["previous_response_id"] = prev_id
+		resp = client.responses.create(**kwargs)  # type: ignore[arg-type]
+		# Save current id for next turns
 		try:
-			import logging as _logging  # noqa: WPS433
-			_logging.getLogger(__name__).info("[ai_module] waiting status=%s session=%s", status, thread_id)
-			frappe.logger().debug(f"[ai_module] waiting status={status} session={thread_id}")
+			if getattr(resp, "id", None):
+				resp_map[thread_id] = str(resp.id)
+				_save_responses_map(resp_map)
 		except Exception:
 			pass
-		if status == "requires_action":
-			# Tool calls needed
-			tool_outputs = []
-			for tc in r.required_action.submit_tool_outputs.tool_calls:  # type: ignore[attr-defined]
-				# Attempt lazy registration of tool impl if missing; log tool name
-				tool_name = getattr(getattr(tc, "function", None), "name", "")  # type: ignore[attr-defined]
+
+		# Tool calls
+		tool_uses: list[Any] = []
+		try:
+			for item in getattr(resp, "output", []) or []:
+				if getattr(item, "type", "") == "tool_use":
+					tool_uses.append(item)
+		except Exception:
+			tool_uses = []
+
+		if tool_uses:
+			for tu in tool_uses:
 				try:
 					from .tools import ensure_tool_impl_registered
-					registered = ensure_tool_impl_registered(tool_name)
-					try:
-						frappe.logger().info(f"[ai_module] tool_call name={tool_name} registered={registered}")
-					except Exception:
-						pass
+					ensure_tool_impl_registered(getattr(tu, "name", ""))
 				except Exception:
 					pass
-				output = _execute_function_tool(tc, thread_id)
-				tool_outputs.append({"tool_call_id": tc.id, "output": output})
-			client.beta.threads.runs.submit_tool_outputs(
-				thread_id=thread_id,
-				run_id=run.id,
-				tool_outputs=tool_outputs,
-			)
-		elif status == "completed":
-			break
-		elif status in {"failed", "cancelled", "expired"}:
-			raise RuntimeError(f"OpenAI run ended with status={status}")
-		if time.time() - start > timeout_s:
-			raise TimeoutError("Timed out waiting for OpenAI run to complete")
-		time.sleep(poll_interval_s)
+				result = _execute_function_tool(tu, thread_id)
+				inputs.append({
+					"role": "tool",
+					"content": [{"type": "output_text", "text": result}],
+					"tool_call_id": getattr(tu, "id", None),
+				})
+			if time.time() - start > timeout_s:
+				raise TimeoutError("Timed out waiting for OpenAI response to complete")
+			continue
 
-	msgs = client.beta.threads.messages.list(thread_id=thread_id, order="desc", limit=5)
-	final_text = ""
-	# Prefer the most recent assistant message to avoid returning the user's echo
-	if msgs.data:
-		for m in msgs.data:
-			if getattr(m, "role", None) == "assistant":
-				parts = []
-				for c in getattr(m, "content", []) or []:
-					# Expect text entries; join them if multiple
-					text = getattr(getattr(c, "text", None), "value", None)
-					if text:
-						parts.append(text)
-				final_text = "\n".join(parts).strip()
-				break
-		# Fallback to latest message if no assistant message found
-		if not final_text:
-			m = msgs.data[0]
-			parts = []
-			for c in getattr(m, "content", []) or []:
-				text = getattr(getattr(c, "text", None), "value", None)
-				if text:
-					parts.append(text)
-			final_text = "\n".join(parts).strip()
+		# Collect final text
+		texts: list[str] = []
+		try:
+			for item in getattr(resp, "output", []) or []:
+				if getattr(item, "type", "") == "output_text":
+					val = getattr(item, "text", None)
+					if val:
+						texts.append(str(val))
+		except Exception:
+			pass
+		final_text = "\n".join(texts).strip()
+		break
 
 	# Before returning response
 	try:
@@ -225,4 +231,4 @@ def run_with_openai_threads(
 		"final_output": final_text,
 		"thread_id": thread_id,
 		"assistant_id": assistant_id,
-	} 
+	}

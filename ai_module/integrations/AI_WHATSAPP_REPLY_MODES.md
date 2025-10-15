@@ -6,7 +6,7 @@ This document explains how WhatsApp → AI → WhatsApp replies are processed in
 
 - Incoming WhatsApp messages create a `WhatsApp Message` (Type: Incoming).
 - `ai_module` picks the insert via DocEvent and builds a compact payload for the AI.
-- A per-phone OpenAI Threads session is maintained and auto-created on first message.
+- A per-phone local session_id is maintained and auto-created on first message (Responses API).
 - The AI run waits until completion, including tool calls.
 - If `AI_AUTOREPLY` is enabled and the Assistant produced text, an Outgoing `WhatsApp Message` is created.
 
@@ -74,7 +74,7 @@ Use “Debug Environment” in the `AI Assistant Settings` DocType to inspect ef
   - If enabled and `assistant_id` is set in the DocType, use that.
   - Else use `AI_OPENAI_ASSISTANT_ID` from env.
   - Else use a persisted file if present.
-- Threads are created and persisted per phone number. If a thread does not exist, it is created automatically on first message.
+- Sessions are persisted per phone number. We chain responses with previous_response_id for multi-turn continuity.
 - Language is stored per phone and attached to the AI input context under `args.lang`.
 
 ## Tools

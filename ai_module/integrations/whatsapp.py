@@ -1,6 +1,5 @@
 import frappe
 from typing import Any, Dict
-from openai import OpenAI
 from ai_module.agents.config import get_environment, apply_environment
 
 
@@ -233,22 +232,18 @@ def _detect_language(text: str) -> str:
 
 
 def _get_or_create_thread_for_phone(phone: str) -> str:
-	"""Return a persistent OpenAI thread_id for a phone key, creating if absent."""
-	phone_key = (phone or "").strip()
-	if not phone_key:
-		# Fallback: create a brand new thread (will be ephemeral)
-		client = OpenAI()
-		thread = client.beta.threads.create()
-		return thread.id
-	mapping = _load_thread_map()
-	thread_id = mapping.get(phone_key)
-	if thread_id and thread_id.startswith("thread_"):
-		return thread_id
-	client = OpenAI()
-	thread = client.beta.threads.create()
-	mapping[phone_key] = thread.id
-	_save_thread_map(mapping)
-	return thread.id
+    """Return a persistent local session_id for a phone key (no vendor thread)."""
+    phone_key = (phone or "").strip()
+    mapping = _load_thread_map()
+    sid = mapping.get(phone_key)
+    if sid:
+        return sid
+    # Local session id; use a monotonic timestamp fragment
+    import time  # noqa: WPS433
+    sid = f"session_{int(time.time() * 1000)}"
+    mapping[phone_key] = sid
+    _save_thread_map(mapping)
+    return sid
 
 
 def on_whatsapp_after_insert(doc, method=None):
@@ -382,7 +377,7 @@ def on_whatsapp_after_insert(doc, method=None):
 			frappe.enqueue(
 				"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
 				queue=queue_name,
-				job_name=f"ai_whatsapp_{doc.name}",
+				job_id=f"ai_whatsapp_{doc.name}",
 				payload=payload,
 				now=False,
 				timeout=timeout,

@@ -61,6 +61,35 @@ def _coerce_tools_for_responses(tools: Optional[list]) -> list:
 	return coerced
 
 
+def _extract_tool_uses_and_text(resp: Any) -> Dict[str, Any]:
+	"""Support both Responses shapes: top-level output_text or message/content lists.
+
+	Returns dict with keys: tool_uses (list), texts (list[str]).
+	"""
+	tool_uses: list[Any] = []
+	texts: list[str] = []
+	try:
+		# Prefer structured output array
+		for item in (getattr(resp, "output", None) or []):
+			itype = getattr(item, "type", "")
+			if itype == "output_text":
+				val = getattr(item, "text", None)
+				if val:
+					texts.append(str(val))
+			elif itype == "message":
+				for c in (getattr(item, "content", None) or []):
+					ctype = getattr(c, "type", "")
+					if ctype == "output_text":
+						val = getattr(c, "text", None)
+						if val:
+							texts.append(str(val))
+					elif ctype == "tool_use":
+						tool_uses.append(c)
+	except Exception:
+		pass
+	return {"tool_uses": tool_uses, "texts": texts}
+
+
 def _responses_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_responses.json")
 
@@ -202,14 +231,9 @@ def run_with_openai_threads(
 		except Exception:
 			pass
 
-		# Tool calls
-		tool_uses: list[Any] = []
-		try:
-			for item in getattr(resp, "output", []) or []:
-				if getattr(item, "type", "") == "tool_use":
-					tool_uses.append(item)
-		except Exception:
-			tool_uses = []
+		# Tool calls + candidate text
+		parsed = _extract_tool_uses_and_text(resp)
+		tool_uses = parsed.get("tool_uses", [])
 
 		if tool_uses:
 			for tu in tool_uses:
@@ -229,15 +253,7 @@ def run_with_openai_threads(
 			continue
 
 		# Collect final text
-		texts: list[str] = []
-		try:
-			for item in getattr(resp, "output", []) or []:
-				if getattr(item, "type", "") == "output_text":
-					val = getattr(item, "text", None)
-					if val:
-						texts.append(str(val))
-		except Exception:
-			pass
+		texts: list[str] = parsed.get("texts", [])
 		final_text = "\n".join(texts).strip()
 		break
 

@@ -33,6 +33,34 @@ def _lookup_phone_from_thread(thread_id: str) -> Optional[str]:
 		return None
 
 
+def _coerce_tools_for_responses(tools: Optional[list]) -> list:
+	"""Convert Assistants-style function tool schemas to Responses format.
+
+	Accepts items like {"type":"function","function":{name,description,parameters}}
+	and returns {"type":"function","name":name,"description":...,"parameters":...}
+	Other tool definitions are passed through unchanged.
+	"""
+	coerced: list = []
+	for t in (tools or []):
+		try:
+			if isinstance(t, dict) and (t.get("type") or "").lower() == "function":
+				fn = t.get("function") or {}
+				name = (fn.get("name") or "").strip()
+				params = fn.get("parameters") or {"type": "object", "properties": {}}
+				desc = fn.get("description") or ""
+				coerced.append({
+					"type": "function",
+					"name": name,
+					"description": desc,
+					"parameters": params,
+				})
+			else:
+				coerced.append(t)
+		except Exception:
+			coerced.append(t)
+	return coerced
+
+
 def _responses_map_path() -> str:
 	return frappe.utils.get_site_path("private", "files", "ai_whatsapp_responses.json")
 
@@ -152,7 +180,7 @@ def run_with_openai_threads(
 		inputs.append({"role": "system", "content": [{"type": "input_text", "text": instr}]})
 	inputs.append({"role": "user", "content": [{"type": "input_text", "text": message}]})
 
-	tools = get_assistant_tools() or []
+	tools = _coerce_tools_for_responses(get_assistant_tools() or [])
 	model = get_environment().get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"
 
 	resp_map = _load_responses_map()

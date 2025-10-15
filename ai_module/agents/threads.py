@@ -149,8 +149,8 @@ def run_with_openai_threads(
 	instr = (get_current_instructions() or "").strip()
 	inputs: list[Dict[str, Any]] = []
 	if instr:
-		inputs.append({"role": "system", "content": [{"type": "text", "text": instr}]})
-	inputs.append({"role": "user", "content": [{"type": "text", "text": message}]})
+		inputs.append({"role": "system", "content": [{"type": "input_text", "text": instr}]})
+	inputs.append({"role": "user", "content": [{"type": "input_text", "text": message}]})
 
 	tools = get_assistant_tools() or []
 	model = get_environment().get("AI_ASSISTANT_MODEL") or "gpt-4o-mini"

@@ -381,6 +381,7 @@ def on_whatsapp_after_insert(doc, method=None):
 				payload=payload,
 				now=False,
 				timeout=timeout,
+				enqueue_after_commit=True,
 			)
 		except Exception:
 			# Fallback to inline processing if enqueue is unavailable (e.g., local dev)

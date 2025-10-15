@@ -62,9 +62,11 @@ def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
 		if thread_phone:
 			# Always override any incoming phone_from with the trusted thread phone
 			args["phone_from"] = thread_phone
-		# For sensitive tools, ensure direct mobile_no is never accepted from user
-		if name == "new_client_lead":
-			args.pop("mobile_no", None)
+		# Globally drop any user-supplied phone fields (allow only phone_from)
+		for key in list(args.keys()):
+			k = str(key).lower()
+			if k in {"phone", "mobile", "mobile_no"}:
+				args.pop(key, None)
 	except Exception:
 		pass
 

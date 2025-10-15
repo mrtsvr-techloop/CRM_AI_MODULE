@@ -1,12 +1,15 @@
+"""AI Assistant Settings DocType.
+
+Manages AI assistant configuration including model, instructions, and tools.
+With Responses API, settings are used per-request, not stored in a persistent Assistant object.
+"""
+
 from __future__ import annotations
 
 import frappe
 from frappe.model.document import Document
 
-from ai_module.agents.config import (
-	get_environment,
-	get_openai_assistant_id,
-)
+from ai_module.agents.config import get_environment
 
 
 class AIAssistantSettings(Document):
@@ -71,13 +74,27 @@ def ai_assistant_debug_env() -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def ai_assistant_reset_persistence(clear_threads: bool = True) -> dict:
-	"""Expose reset persistence to delete saved assistant id and thread map."""
+	"""Delete persisted session maps (phone->session, session->response).
+	
+	Args:
+		clear_threads: If True, clear all session mappings
+	
+	Returns:
+		{"success": bool, "deleted": {...}}
+	"""
 	from ai_module.api import ai_reset_persistence
 	return ai_reset_persistence(clear_threads=clear_threads)
 
 
 @frappe.whitelist(methods=["POST"])
 def ai_assistant_force_update() -> str:
-	"""Manual button action to force update of Assistant even without changes."""
+	"""Validate current assistant configuration.
+	
+	Returns:
+		Validation message string
+	
+	Note: With Responses API, this validates configuration instead of
+	updating a persistent Assistant object.
+	"""
 	from ai_module.agents.assistant_update import upsert_assistant
 	return upsert_assistant(force=True) 

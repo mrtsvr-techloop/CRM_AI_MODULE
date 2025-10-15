@@ -1,3 +1,8 @@
+"""AI Module Public API.
+
+Provides whitelisted endpoints for AI agent management and debugging.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
@@ -5,33 +10,37 @@ from typing import Any, Dict, List, Optional
 import frappe
 
 from .agents import Agent, register_agent, register_tool, list_agents, list_tools, run_agent
-from .agents.config import apply_environment, get_environment, get_openai_assistant_id, _assistant_id_file_path
+from .agents.config import apply_environment, get_environment
 
 
 @frappe.whitelist(methods=["GET"])
 def ai_debug_env() -> Dict[str, Any]:
-	"""Return the effective environment and persistence status used by the AI module.
+	"""Return the effective environment and session status used by the AI module.
 
 	Useful on Cloud to verify what the app is actually reading without shell access.
+	
+	Note: With Responses API, we no longer persist assistant_id.
 	"""
 	apply_environment()
 	env = get_environment()
-	assistant_id = get_openai_assistant_id()
-	assistant_id_file = _assistant_id_file_path()
+	
+	# Get session map paths
 	thread_map_path = None
+	response_map_path = None
+	
 	try:
 		thread_map_path = frappe.utils.get_site_path("private", "files", "ai_whatsapp_threads.json")
+		response_map_path = frappe.utils.get_site_path("private", "files", "ai_response_map.json")
 	except Exception:
-		thread_map_path = None
+		pass
 
 	def _exists(path: Optional[str]) -> bool:
-		import os  # noqa: WPS433
+		import os
 		return bool(path and os.path.exists(path))
 
 	# Only expose relevant keys; do not echo secrets back
 	visible_keys = {
 		"AI_AGENT_NAME",
-		"AI_OPENAI_ASSISTANT_ID",
 		"AI_ASSISTANT_NAME",
 		"AI_ASSISTANT_MODEL",
 		"AI_AUTOREPLY",
@@ -41,46 +50,71 @@ def ai_debug_env() -> Dict[str, Any]:
 		"OPENAI_ORG_ID",
 		"OPENAI_PROJECT",
 		"OPENAI_BASE_URL",
-		"OPENAI_API_KEY",  # only presence is reflected via api_key_present
+		"OPENAI_API_KEY",  # only presence is reflected via ***
 	}
-	filtered_env = {k: ("***" if k == "OPENAI_API_KEY" and env.get(k) else env.get(k)) for k in sorted(visible_keys)}
+	filtered_env = {
+		k: ("***" if k == "OPENAI_API_KEY" and env.get(k) else env.get(k)) 
+		for k in sorted(visible_keys)
+	}
 
 	return {
 		"env": filtered_env,
-		"session_mode": "openai_threads",
-		"assistant_id": assistant_id,
-		"assistant_id_file": assistant_id_file,
-		"assistant_id_file_exists": _exists(assistant_id_file),
+		"api_mode": "responses_api",
+		"session_mode": "phone_to_session_to_response",
 		"thread_map_path": thread_map_path,
 		"thread_map_exists": _exists(thread_map_path),
+		"response_map_path": response_map_path,
+		"response_map_exists": _exists(response_map_path),
 	}
 
 
 @frappe.whitelist(methods=["POST"])
 def ai_reset_persistence(clear_threads: bool = True) -> Dict[str, Any]:
-	"""Delete persisted Assistant id and optional thread map to force re-read of env.
+	"""Delete persisted session maps (phone->session, session->response).
 
-	Note: If AI_OPENAI_ASSISTANT_ID is set in env, it still overrides. Remove it in the
-	Cloud Environment panel to allow auto-create with new settings.
+	Args:
+		clear_threads: If True, also clear the thread/session mapping
+	
+	Returns:
+		{"success": bool, "deleted": {...}}
+	
+	Note: With Responses API, we no longer persist assistant_id.
 	"""
-	apply_environment()
-	deleted = {"assistant_id_file": False, "thread_map": False}
-	import os  # noqa: WPS433
-
-	path = _assistant_id_file_path()
-	if path and os.path.exists(path):
-		try:
-			os.remove(path)
-			deleted["assistant_id_file"] = True
-		except Exception:
-			pass
+	import os
+	
+	deleted = {
+		"thread_map": False,
+		"response_map": False,
+		"language_map": False,
+		"human_activity_map": False,
+	}
 
 	if clear_threads:
 		try:
+			# Clear phone -> session mapping
 			thread_map = frappe.utils.get_site_path("private", "files", "ai_whatsapp_threads.json")
 			if os.path.exists(thread_map):
 				os.remove(thread_map)
 				deleted["thread_map"] = True
+			
+			# Clear session -> response_id mapping
+			response_map = frappe.utils.get_site_path("private", "files", "ai_response_map.json")
+			if os.path.exists(response_map):
+				os.remove(response_map)
+				deleted["response_map"] = True
+			
+			# Clear language detection map
+			language_map = frappe.utils.get_site_path("private", "files", "ai_language_map.json")
+			if os.path.exists(language_map):
+				os.remove(language_map)
+				deleted["language_map"] = True
+			
+			# Clear human activity tracking
+			activity_map = frappe.utils.get_site_path("private", "files", "ai_human_activity.json")
+			if os.path.exists(activity_map):
+				os.remove(activity_map)
+				deleted["human_activity_map"] = True
+		
 		except Exception:
 			pass
 
@@ -161,34 +195,70 @@ def ai_run_agent(agent_name: str, message: str, session_id: Optional[str] = None
 
 @frappe.whitelist()
 def ai_get_instructions() -> str:
-	"""Return current instructions (DocType value if present, else code)."""
+	"""Return current instructions (DocType value if present, else default).
+	
+	Returns:
+		Current assistant instructions as a string
+	"""
 	from .agents.assistant_update import get_current_instructions
 
 	return get_current_instructions()
 
 
 @frappe.whitelist(methods=["POST"])
-def ai_set_instructions(instructions: str) -> str:
-	"""Save instructions into the singleton DocType and return updated Assistant id."""
-	# Ensure singleton exists; create if missing
+def ai_set_instructions(instructions: str) -> Dict[str, Any]:
+	"""Save instructions into the singleton DocType.
+	
+	Args:
+		instructions: New assistant instructions
+	
+	Returns:
+		{"success": bool, "message": str}
+	
+	Note: With Responses API, instructions are passed directly to each
+	response creation call, not stored in an Assistant object.
+	"""
+	# Ensure singleton exists
 	dt = "AI Assistant Settings"
 	if not frappe.db.exists("DocType", dt):
 		raise frappe.DoesNotExistError("AI Assistant Settings doctype is not installed")
+	
 	# Update value only if DocType override is enabled
 	doc = frappe.get_single(dt)
 	if not getattr(doc, "use_settings_override", 0):
-		return ""
+		return {
+			"success": False,
+			"message": "Settings override is not enabled in AI Assistant Settings"
+		}
+	
 	frappe.db.set_value(dt, dt, "instructions", instructions)
 	frappe.db.commit()
-	# Upsert Assistant
+	
+	# Validate configuration
 	from .agents.assistant_update import upsert_assistant
-
-	return upsert_assistant(force=True)
+	result = upsert_assistant(force=True)
+	
+	return {
+		"success": True,
+		"message": result
+	}
 
 
 @frappe.whitelist(methods=["POST"])
-def ai_update_assistant() -> str:
-	"""Force update the Assistant on OpenAI (without changing instructions)."""
+def ai_update_assistant() -> Dict[str, Any]:
+	"""Validate current assistant configuration.
+	
+	Returns:
+		{"success": bool, "message": str}
+	
+	Note: With Responses API, there is no persistent Assistant to update.
+	This endpoint validates that configuration is correct.
+	"""
 	from .agents.assistant_update import upsert_assistant
 
-	return upsert_assistant(force=True) 
+	result = upsert_assistant(force=True)
+	
+	return {
+		"success": True,
+		"message": result
+	} 

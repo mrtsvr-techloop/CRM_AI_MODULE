@@ -11,11 +11,12 @@ import frappe
 
 from .config import get_settings_prompt_only, get_env_assistant_spec, get_environment
 from .assistant_spec import get_assistant_tools
+from .logger_utils import get_resilient_logger
 
 
 def _log():
 	"""Get Frappe logger for assistant_update module."""
-	return frappe.logger("ai_module.assistant_update")
+	return get_resilient_logger("ai_module.assistant_update")
 
 
 def get_current_instructions() -> str:

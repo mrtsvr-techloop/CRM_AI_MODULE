@@ -5,6 +5,7 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 from ai_module.agents.config import get_environment, apply_environment
+from ai_module.agents.logger_utils import get_resilient_logger
 
 # Constants
 DEFAULT_COOLDOWN_SECONDS = 300
@@ -22,7 +23,7 @@ HANDOFF_MAP_FILE = "ai_whatsapp_handoff.json"
 
 def _log():
 	"""Get Frappe logger for WhatsApp integration."""
-	return frappe.logger("ai_module.whatsapp")
+	return get_resilient_logger("ai_module.whatsapp")
 
 
 def _is_incoming_message(doc) -> bool:

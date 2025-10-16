@@ -13,11 +13,12 @@ from __future__ import annotations
 import frappe
 
 from .config import apply_environment
+from .logger_utils import get_resilient_logger
 
 
 def _log():
 	"""Get Frappe logger for bootstrap module."""
-	return frappe.logger("ai_module.bootstrap")
+	return get_resilient_logger("ai_module.bootstrap")
 
 
 def _register_tools() -> None:

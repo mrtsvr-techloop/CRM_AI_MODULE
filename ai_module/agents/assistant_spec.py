@@ -15,10 +15,12 @@ from typing import Any, Dict, List
 
 import frappe
 
+from .logger_utils import get_resilient_logger
+
 
 def _log():
 	"""Get Frappe logger for assistant_spec module."""
-	return frappe.logger("ai_module.assistant_spec")
+	return get_resilient_logger("ai_module.assistant_spec")
 
 
 # Default system instructions for the AI assistant

@@ -6,6 +6,8 @@ from typing import Dict, Optional
 import frappe
 from frappe.utils.html_utils import clean_html
 
+from .logger_utils import get_resilient_logger
+
 # OpenAI environment keys
 OPENAI_API_KEY = "OPENAI_API_KEY"
 OPENAI_ORG_ID = "OPENAI_ORG_ID"
@@ -15,7 +17,7 @@ OPENAI_BASE_URL = "OPENAI_BASE_URL"
 
 def _log():
 	"""Get Frappe logger for config module."""
-	return frappe.logger("ai_module.config")
+	return get_resilient_logger("ai_module.config")
 
 
 def _get_frappe_environment() -> Dict[str, str]:

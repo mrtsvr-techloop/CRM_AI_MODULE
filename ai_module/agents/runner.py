@@ -18,12 +18,13 @@ import frappe
 from agents import Agent
 
 from .bootstrap import initialize
+from .logger_utils import get_resilient_logger
 from .registry import get_agent as _get_registered_agent
 
 
 def _log():
 	"""Get Frappe logger for runner module."""
-	return frappe.logger("ai_module.runner")
+	return get_resilient_logger("ai_module.runner")
 
 
 def _resolve_agent(agent_or_name: Union[str, Agent], model: Optional[str]) -> Agent:

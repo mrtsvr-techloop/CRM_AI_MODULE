@@ -8,6 +8,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import frappe
 from openai import OpenAI, BadRequestError
 
+from .logger_utils import get_resilient_logger
+
 # Constants
 DEFAULT_TIMEOUT_SECONDS = 120
 DEFAULT_POLL_INTERVAL = 0.75
@@ -26,7 +28,7 @@ RESPONSES_MAP_FILE = "ai_whatsapp_responses.json"
 
 def _log():
 	"""Get Frappe logger for threads module."""
-	return frappe.logger("ai_module.threads")
+	return get_resilient_logger("ai_module.threads")
 
 
 def _get_map_path(filename: str) -> str:

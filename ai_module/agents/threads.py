@@ -20,6 +20,7 @@ DEFAULT_MODEL = "gpt-4o-mini"
 OUTPUT_TEXT = "output_text"
 MESSAGE = "message"
 TOOL_USE = "tool_use"
+FUNCTION_CALL = "function_call"  # Actual type used by Responses API for tool calls
 
 # File paths
 THREAD_MAP_FILE = "ai_whatsapp_threads.json"
@@ -143,7 +144,7 @@ def _extract_tool_uses_and_text(resp: Any) -> Dict[str, Any]:
 			val = getattr(ev, "text", None)
 			if val:
 				texts.append(str(val))
-		elif evt_type == TOOL_USE:
+		elif evt_type == TOOL_USE or evt_type == FUNCTION_CALL:
 			tool_uses.append(ev)
 		else:
 			# Log unknown event types but continue processing (non-fatal)
@@ -164,7 +165,14 @@ def _save_responses_map(mapping: Dict[str, str]) -> None:
 
 def _extract_tool_name_and_args(tool_call: Any) -> Tuple[str, Dict[str, Any]]:
 	"""Extract function name and arguments from a tool call object."""
-	# Responses API shape
+	# Responses API function_call shape (with arguments as JSON string)
+	if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
+		name = str(getattr(tool_call, "name"))
+		args_json = getattr(tool_call, "arguments")
+		args = json.loads(args_json) if args_json else {}
+		return name, args
+	
+	# Responses API tool_use shape (with input as dict)
 	if hasattr(tool_call, "name") and hasattr(tool_call, "input"):
 		name = str(getattr(tool_call, "name"))
 		inp = getattr(tool_call, "input")
@@ -373,48 +381,41 @@ def run_with_responses_api(
 	final_text = ""
 	start_time = time.time()
 	iteration = 0
-	current_response_id = prev_id  # Start with previous conversation's response_id
-	tool_results_only: List[Dict[str, Any]] = []  # Track tool results for subsequent calls
 	
 	for _ in range(MAX_ITERATIONS):
 		iteration += 1
 		_log().info(f"AI loop iteration {iteration}/{MAX_ITERATIONS}")
 		
-		# Determine which inputs to send:
-		# - First iteration: full inputs (system + user message)
-		# - Subsequent iterations (tool calling): ONLY tool results
-		# When using previous_response_id, OpenAI already has the conversation context
-		if iteration == 1:
-			inputs_to_send = inputs
-		else:
-			inputs_to_send = tool_results_only
-			_log().debug(f"Sending only tool results ({len(tool_results_only)} items)")
+		# Determine previous_response_id:
+		# - First iteration: use prev_id from previous conversation turn
+		# - Subsequent iterations (tool calling): DON'T use it (Responses API limitation)
+		request_prev_id = prev_id if iteration == 1 else None
 		
-		# Always use current_response_id for continuity (conversation + tool calling)
-		if current_response_id:
-			_log().debug(f"Using previous_response_id: {current_response_id[:20]}...")
+		if request_prev_id:
+			_log().debug(f"Using previous_response_id: {request_prev_id[:20]}...")
 		else:
-			_log().debug("No previous_response_id (first message in new conversation)")
+			_log().debug("No previous_response_id (first turn or tool calling iteration)")
 		
 		# Create AI response
 		try:
 			# Debug: log inputs before calling API
-			_log().debug(f"Calling API with {len(inputs_to_send)} input messages, prev_id={'Yes' if current_response_id else 'None'}")
-			for idx, inp in enumerate(inputs_to_send):
+			_log().debug(f"Calling API with {len(inputs)} input messages, prev_id={'Yes' if request_prev_id else 'None'}")
+			for idx, inp in enumerate(inputs):
 				role = inp.get("role", "?")
-				_log().debug(f"  Input[{idx}]: role={role}, has_tool_call_id={bool(inp.get('tool_call_id'))}")
+				_log().debug(f"  Input[{idx}]: role={role}")
 			
-			resp = _create_ai_response(client, model, inputs_to_send, tools, current_response_id)
+			resp = _create_ai_response(client, model, inputs, tools, request_prev_id)
 			_log().info(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
 		except BadRequestError as exc:
 			_log().error(f"AI API bad request: {exc}")
-			_log().error(f"Request had {len(inputs_to_send)} inputs, prev_id={current_response_id[:20] if current_response_id else 'None'}")
+			_log().error(f"Request had {len(inputs)} inputs, prev_id={request_prev_id[:20] if request_prev_id else 'None'}")
 			raise
 		
-		# Update current_response_id for next iteration (tool calling loop continuity)
+		# Track response ID for saving (only if this is the final response)
+		current_response_id = None
 		if getattr(resp, "id", None):
 			current_response_id = str(resp.id)
-			_log().debug(f"Updated current_response_id: {current_response_id[:20]}...")
+			_log().debug(f"Current response_id: {current_response_id[:20]}...")
 		
 		# Extract tool uses and text
 		parsed = _extract_tool_uses_and_text(resp)
@@ -427,11 +428,31 @@ def run_with_responses_api(
 		
 		# Process tool calls if any
 		if tool_uses:
-			# Clear tool_results_only and populate with new tool results
-			tool_results_only.clear()
-			# Execute tools and add results to tool_results_only (not inputs!)
-			_process_tool_uses(tool_uses, thread_id, tool_results_only)
-			_log().info(f"Tools executed, continuing to next iteration with {len(tool_results_only)} tool results...")
+			# Execute tools and format results as user messages
+			# Responses API doesn't support role="tool", so we format as user messages
+			tool_results: List[str] = []
+			for tool_use in tool_uses:
+				tool_name = getattr(tool_use, "name", "")
+				from .tools import ensure_tool_impl_registered
+				ensure_tool_impl_registered(tool_name)
+				
+				try:
+					result = _execute_function_tool(tool_use, thread_id)
+					_log().info(f"Tool {tool_name} executed successfully, result length: {len(str(result))}")
+					tool_results.append(f"Function {tool_name} returned: {result}")
+				except Exception as exc:
+					_log().exception(f"Tool {tool_name} FAILED: {exc}")
+					error_result = json.dumps({"error": str(exc), "success": False})
+					tool_results.append(f"Function {tool_name} failed: {error_result}")
+			
+			# Add tool results as user message to inputs
+			if tool_results:
+				combined_result = "\n".join(tool_results)
+				inputs.append({
+					"role": "user",
+					"content": [{"type": "input_text", "text": combined_result}]
+				})
+				_log().info(f"Added {len(tool_results)} tool results as user message, continuing to next iteration...")
 			
 			# Check timeout
 			if time.time() - start_time > timeout_s:

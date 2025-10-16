@@ -144,8 +144,8 @@ def _extract_tool_uses_and_text(resp: Any) -> Dict[str, Any]:
 		elif evt_type == TOOL_USE:
 			tool_uses.append(ev)
 		else:
-			# Unknown event types are considered non-fatal, but we surface them for debugging
-			raise ValueError(f"Responses API: unknown event type '{evt_type}' in output")
+			# Log unknown event types but continue processing (non-fatal)
+			_log().warning(f"Responses API: unknown event type '{evt_type}' in output - ignoring")
 	
 	return {"tool_uses": tool_uses, "texts": texts}
 
@@ -340,6 +340,12 @@ def run_with_responses_api(
 	resp_map = _load_responses_map()
 	prev_id = resp_map.get(thread_id)
 	
+	# Log conversation continuity status
+	if prev_id:
+		_log().info(f"Continuing conversation: session={thread_id} prev_response={prev_id[:20]}...")
+	else:
+		_log().info(f"Starting new conversation: session={thread_id}")
+	
 	# Iterative processing loop
 	final_text = ""
 	start_time = time.time()
@@ -352,14 +358,21 @@ def run_with_responses_api(
 			_log().exception(f"AI API bad request: {exc}")
 			raise
 		
-		# Save response ID for next turn
+		# Save response ID for next turn AND update prev_id for next iteration
 		if getattr(resp, "id", None):
-			resp_map[thread_id] = str(resp.id)
+			prev_id = str(resp.id)  # Update for next iteration in this loop
+			resp_map[thread_id] = prev_id
 			_save_responses_map(resp_map)
+			_log().debug(f"Saved response_id for session {thread_id}: {prev_id[:20]}...")
 		
 		# Extract tool uses and text
 		parsed = _extract_tool_uses_and_text(resp)
 		tool_uses = parsed.get("tool_uses", [])
+		
+		# Log tool execution if present
+		if tool_uses:
+			tool_names = [getattr(t, "name", "unknown") for t in tool_uses]
+			_log().info(f"Executing tools: {', '.join(tool_names)}")
 		
 		# Process tool calls if any
 		if tool_uses:

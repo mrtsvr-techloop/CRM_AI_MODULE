@@ -391,6 +391,15 @@ Il **mapping phone → session** è **identico**, quindi:
 
 ## 📚 Additional Resources
 
+### Documentazione di Questo Progetto
+
+- **[LOG_GUIDE.md](./LOG_GUIDE.md)** 🔥 - Guida rapida visualizzazione log (WSL + Frappe Cloud)
+- **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Risoluzione problemi comuni
+- **[MIGRATION.md](./MIGRATION.md)** - Migrazione da Assistants API (deprecata)
+- **[AI_WHATSAPP_REPLY_MODES.md](./integrations/AI_WHATSAPP_REPLY_MODES.md)** - Dettagli integrazione WhatsApp
+
+### Link Esterni
+
 - [OpenAI Responses API Docs](https://platform.openai.com/docs/api-reference/responses/create)
 - [OpenAI Migration Guide](https://platform.openai.com/docs/guides/migrate-to-responses)
 - [Frappe Framework Docs](https://frappeframework.com/docs)
@@ -411,5 +420,21 @@ Contributions are welcome! Please:
 ## 💬 Support
 
 Per supporto:
-- GitHub Issues: [Report a bug](https://github.com/your-repo/ai_module/issues)
-- Documentation: Vedi `AI_WHATSAPP_REPLY_MODES.md` per dettagli WhatsApp
+
+1. **Consulta le Guide:**
+   - 🔥 [LOG_GUIDE.md](./LOG_GUIDE.md) - Come vedere i log
+   - 🐛 [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - Problemi comuni
+   - 📱 [AI_WHATSAPP_REPLY_MODES.md](./integrations/AI_WHATSAPP_REPLY_MODES.md) - WhatsApp
+
+2. **Debugging:**
+   ```bash
+   # Locale (WSL)
+   tail -f sites/<site>/logs/bench.log | grep ai_module
+   
+   # Frappe Cloud
+   Dashboard → Logs → App Logs → Cerca "ai_module"
+   ```
+
+3. **GitHub Issues:**
+   - [Report a bug](https://github.com/your-repo/ai_module/issues)
+   - Includi i log per supporto più veloce

@@ -42,10 +42,9 @@ Replace `YOUR-SITE` with your actual Frappe Cloud site name.
 
 ### 3. Authentication
 
-- Enter your **Frappe username** and **password**
-- Click **Login**
-- The page will automatically run diagnostics after successful authentication
-- Click **Logout** when finished to clear your session
+- **If not logged in**: You'll be automatically redirected to Frappe's login page
+- **If already logged in**: The page will show your username and auto-run diagnostics
+- **After login**: Frappe will redirect you back to the diagnostics page
 
 ---
 
@@ -140,8 +139,8 @@ curl -X POST https://YOUR-SITE.frappe.cloud/api/method/ai_module.api.reset_sessi
 
 ### Authentication Required
 - All endpoints require valid Frappe authentication
-- Guest users are automatically blocked
-- Session tokens are used for API calls
+- Guest users are automatically redirected to login
+- Uses Frappe's built-in session management
 
 ### Access Logging
 - All diagnostic access is logged with user and IP

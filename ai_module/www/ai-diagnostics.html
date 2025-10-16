@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AI Module Diagnostics</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+        .status.pass {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.fail {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .test {
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .test-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .test-name {
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge.pass { background: #28a745; color: white; }
+        .badge.fail { background: #dc3545; color: white; }
+        .badge.warning { background: #ffc107; color: black; }
+        .badge.error { background: #6c757d; color: white; }
+        .test-details {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        button.danger:hover {
+            background: #c82333;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔬 AI Module Diagnostics</h1>
+        
+        <div>
+            <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
+            <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function runDiagnostics() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Running diagnostics...</div>';
+            
+            fetch('/api/method/ai_module.ai_module.api_diagnostics.run_diagnostics')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        displayResults(data.message);
+                    } else {
+                        resultsDiv.innerHTML = '<div class="status fail">Error: ' + JSON.stringify(data) + '</div>';
+                    }
+                })
+                .catch(error => {
+                    resultsDiv.innerHTML = '<div class="status fail">Error: ' + error.message + '</div>';
+                });
+        }
+        
+        function displayResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = `
+                <div class="status ${results.overall_status}">
+                    ${results.overall_status === 'pass' ? '✅' : results.overall_status === 'warning' ? '⚠️' : '❌'} 
+                    ${results.overall_message}
+                </div>
+            `;
+            
+            // Display each test
+            for (const [testName, test] of Object.entries(results.tests)) {
+                html += `
+                    <div class="test">
+                        <div class="test-header">
+                            <span class="test-name">${formatTestName(testName)}</span>
+                            <span class="badge ${test.status}">${test.status.toUpperCase()}</span>
+                        </div>
+                        <div class="test-details">
+                            ${test.message || ''}
+                        </div>
+                        ${test.errors && test.errors.length > 0 ? `
+                            <pre>${JSON.stringify(test.errors, null, 2)}</pre>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            html += `<div class="timestamp">Last run: ${results.timestamp}</div>`;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function formatTestName(name) {
+            return name.split('_').map(word => 
+                word.charAt(0).toUpperCase() + word.slice(1)
+            ).join(' ');
+        }
+        
+        function resetSessions() {
+            if (!confirm('Are you sure you want to reset all AI sessions? This will clear conversation history.')) {
+                return;
+            }
+            
+            fetch('/api/method/ai_module.ai_module.api_diagnostics.reset_sessions', {
+                method: 'POST'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        alert('Sessions reset: ' + data.message.message);
+                        runDiagnostics();
+                    }
+                })
+                .catch(error => {
+                    alert('Error: ' + error.message);
+                });
+        }
+        
+        // Auto-run on load
+        window.onload = () => runDiagnostics();
+    </script>
+</body>
+</html>
+

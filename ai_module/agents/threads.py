@@ -373,21 +373,19 @@ def run_with_responses_api(
 	final_text = ""
 	start_time = time.time()
 	iteration = 0
-	is_first_iteration = True  # Track if this is the first call
-	current_response_id = None  # Track current response ID
+	current_response_id = prev_id  # Start with previous response ID if available
 	
 	for _ in range(MAX_ITERATIONS):
 		iteration += 1
 		_log().info(f"AI loop iteration {iteration}/{MAX_ITERATIONS}")
 		
-		# Use previous_response_id ONLY on first iteration (for conversation continuity)
-		# For subsequent iterations (tool calling loop), don't use it
-		request_prev_id = prev_id if is_first_iteration else None
+		# Always use current_response_id if available (for continuity)
+		request_prev_id = current_response_id
 		
 		if request_prev_id:
 			_log().debug(f"Using previous_response_id: {request_prev_id[:20]}...")
 		else:
-			_log().debug("No previous_response_id (first message or tool calling continuation)")
+			_log().debug("No previous_response_id (first message in conversation)")
 		
 		# Create AI response
 		try:
@@ -404,10 +402,7 @@ def run_with_responses_api(
 			_log().error(f"Request had {len(inputs)} inputs, prev_id={request_prev_id[:20] if request_prev_id else 'None'}")
 			raise
 		
-		# Mark that we've done the first iteration
-		is_first_iteration = False
-		
-		# Track current response ID (save to DB only at the end)
+		# Update current response ID for continuity
 		if getattr(resp, "id", None):
 			current_response_id = str(resp.id)
 			_log().debug(f"Current response_id: {current_response_id[:20]}...")
@@ -423,36 +418,9 @@ def run_with_responses_api(
 		
 		# Process tool calls if any
 		if tool_uses:
-			# IMPORTANT: Add AI's response (with tool calls) to inputs first
-			# The Responses API expects the full conversation flow:
-			# user -> assistant (with tool_calls) -> tool (with results) -> assistant (final)
-			_log().debug("Adding AI response with tool calls to inputs...")
-			
-			# Extract text outputs from AI response (if any)
-			ai_content = []
-			texts = parsed.get("texts", [])
-			if texts:
-				for text in texts:
-					if text:
-						ai_content.append({"type": "output_text", "text": text})
-			
-			# Add tool calls to AI response
-			for tool_use in tool_uses:
-				ai_content.append({
-					"type": "function_call",
-					"id": getattr(tool_use, "id", None),
-					"name": getattr(tool_use, "name", ""),
-					"arguments": getattr(tool_use, "arguments", ""),
-				})
-			
-			# Add AI's message to inputs
-			inputs.append({
-				"role": "assistant",
-				"content": ai_content
-			})
-			_log().debug(f"Added assistant message with {len(tool_uses)} tool calls")
-			
-			# Now process and add tool results
+			# Execute tools and add results to inputs
+			# NOTE: Responses API with previous_response_id handles tool calling automatically
+			# We just need to provide the tool results
 			_process_tool_uses(tool_uses, thread_id, inputs)
 			_log().info(f"Tools executed, continuing to next iteration for AI response...")
 			

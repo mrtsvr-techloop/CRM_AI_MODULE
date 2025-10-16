@@ -391,10 +391,17 @@ def run_with_responses_api(
 		
 		# Create AI response
 		try:
+			# Debug: log inputs before calling API
+			_log().debug(f"Calling API with {len(inputs)} input messages, prev_id={'Yes' if request_prev_id else 'None'}")
+			for idx, inp in enumerate(inputs):
+				role = inp.get("role", "?")
+				_log().debug(f"  Input[{idx}]: role={role}, has_tool_call_id={bool(inp.get('tool_call_id'))}")
+			
 			resp = _create_ai_response(client, model, inputs, tools, request_prev_id)
-			_log().debug(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
+			_log().info(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
 		except BadRequestError as exc:
-			_log().exception(f"AI API bad request: {exc}")
+			_log().error(f"AI API bad request: {exc}")
+			_log().error(f"Request had {len(inputs)} inputs, prev_id={request_prev_id[:20] if request_prev_id else 'None'}")
 			raise
 		
 		# Mark that we've done the first iteration
@@ -416,6 +423,36 @@ def run_with_responses_api(
 		
 		# Process tool calls if any
 		if tool_uses:
+			# IMPORTANT: Add AI's response (with tool calls) to inputs first
+			# The Responses API expects the full conversation flow:
+			# user -> assistant (with tool_calls) -> tool (with results) -> assistant (final)
+			_log().debug("Adding AI response with tool calls to inputs...")
+			
+			# Extract text outputs from AI response (if any)
+			ai_content = []
+			texts = parsed.get("texts", [])
+			if texts:
+				for text in texts:
+					if text:
+						ai_content.append({"type": "output_text", "text": text})
+			
+			# Add tool calls to AI response
+			for tool_use in tool_uses:
+				ai_content.append({
+					"type": "function_call",
+					"id": getattr(tool_use, "id", None),
+					"name": getattr(tool_use, "name", ""),
+					"arguments": getattr(tool_use, "arguments", ""),
+				})
+			
+			# Add AI's message to inputs
+			inputs.append({
+				"role": "assistant",
+				"content": ai_content
+			})
+			_log().debug(f"Added assistant message with {len(tool_uses)} tool calls")
+			
+			# Now process and add tool results
 			_process_tool_uses(tool_uses, thread_id, inputs)
 			_log().info(f"Tools executed, continuing to next iteration for AI response...")
 			

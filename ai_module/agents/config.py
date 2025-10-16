@@ -107,6 +107,23 @@ def _get_settings_overrides() -> Dict[str, str]:
 		if value:
 			overrides[env_key] = value
 	
+	# WhatsApp orchestration settings (boolean flags)
+	bool_field_mapping = {
+		"AI_AUTOREPLY": "wa_enable_autoreply",
+		"AI_WHATSAPP_INLINE": "wa_force_inline",
+	}
+	
+	for env_key, field_name in bool_field_mapping.items():
+		value = getattr(settings, field_name, None)
+		if value is not None:
+			# Convert boolean to "true"/"false" string
+			overrides[env_key] = "true" if int(value or 0) else "false"
+	
+	# WhatsApp cooldown (integer)
+	cooldown = getattr(settings, "wa_human_cooldown_seconds", None)
+	if cooldown is not None:
+		overrides["AI_WHATSAPP_COOLDOWN"] = str(cooldown)
+	
 	return overrides
 
 

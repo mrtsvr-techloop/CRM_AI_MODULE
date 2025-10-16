@@ -37,11 +37,17 @@ class AIAssistantSettings(Document):
 		# If override is OFF, ensure assistant_id is cleared so it never persists
 		if not getattr(self, "use_settings_override", 0):
 			self.assistant_id = ""
-			# Reset orchestration toggles to reflect env (display only)
-			self.wa_enable_reaction = 0
-			self.wa_enable_autoreply = 0
-			self.wa_force_inline = 0
-			self.wa_human_cooldown_seconds = 300
+			# When override is OFF, set default values for WhatsApp orchestration
+			# These are used as defaults when no environment variable is set
+			# Note: These defaults are only for display; actual behavior is controlled by environment
+			if not hasattr(self, "wa_enable_reaction") or self.wa_enable_reaction is None:
+				self.wa_enable_reaction = 1
+			if not hasattr(self, "wa_enable_autoreply") or self.wa_enable_autoreply is None:
+				self.wa_enable_autoreply = 1
+			if not hasattr(self, "wa_force_inline") or self.wa_force_inline is None:
+				self.wa_force_inline = 0
+			if not hasattr(self, "wa_human_cooldown_seconds") or self.wa_human_cooldown_seconds is None:
+				self.wa_human_cooldown_seconds = 300
 		# Always refresh display fields before save (no-op if override is on)
 		self._populate_readonly_from_env()
 

@@ -268,14 +268,24 @@ def _process_tool_uses(
 	
 	for tool_use in tool_uses:
 		tool_name = getattr(tool_use, "name", "")
+		_log().info(f"Processing tool: {tool_name}")
+		
 		ensure_tool_impl_registered(tool_name)
 		
-		result = _execute_function_tool(tool_use, thread_id)
+		try:
+			result = _execute_function_tool(tool_use, thread_id)
+			_log().info(f"Tool {tool_name} executed successfully, result length: {len(str(result))}")
+		except Exception as exc:
+			_log().exception(f"Tool {tool_name} FAILED: {exc}")
+			# Return error as tool result so AI knows it failed
+			result = json.dumps({"error": str(exc), "success": False})
+		
 		inputs.append({
 			"role": "tool",
 			"content": [{"type": "output_text", "text": result}],
 			"tool_call_id": getattr(tool_use, "id", None),
 		})
+		_log().debug(f"Added tool result to inputs: tool_call_id={getattr(tool_use, 'id', None)}")
 
 
 def _create_ai_response(
@@ -362,11 +372,16 @@ def run_with_responses_api(
 	# Iterative processing loop
 	final_text = ""
 	start_time = time.time()
+	iteration = 0
 	
 	for _ in range(MAX_ITERATIONS):
+		iteration += 1
+		_log().info(f"AI loop iteration {iteration}/{MAX_ITERATIONS}")
+		
 		# Create AI response
 		try:
 			resp = _create_ai_response(client, model, inputs, tools, prev_id)
+			_log().debug(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
 		except BadRequestError as exc:
 			_log().exception(f"AI API bad request: {exc}")
 			raise
@@ -390,6 +405,7 @@ def run_with_responses_api(
 		# Process tool calls if any
 		if tool_uses:
 			_process_tool_uses(tool_uses, thread_id, inputs)
+			_log().info(f"Tools executed, continuing to next iteration for AI response...")
 			
 			# Check timeout
 			if time.time() - start_time > timeout_s:
@@ -399,6 +415,7 @@ def run_with_responses_api(
 		# No more tool calls - collect final text
 		texts: List[str] = parsed.get("texts", [])
 		final_text = "\n".join(texts).strip()
+		_log().info(f"Final text collected: length={len(final_text)}")
 		break
 	
 	# Log response

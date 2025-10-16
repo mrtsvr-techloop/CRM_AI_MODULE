@@ -395,10 +395,14 @@ def _send_autoreply(payload: Dict[str, Any], reply_text: str) -> None:
 	try:
 		from crm.api.whatsapp import create_whatsapp_message
 		
-		# Normalize phone number: remove spaces and non-digit characters
-		# Facebook API requires digits only (no spaces, no +)
+		# Normalize phone number: remove spaces but keep digits
+		# Facebook API accepts format like "393926012793" or "+393926012793"
 		phone_from = (payload.get("from") or "").strip()
+		# Remove all spaces and keep only digits
 		phone_normalized = "".join(c for c in phone_from if c.isdigit())
+		# Add + prefix if not present (some WhatsApp APIs expect it)
+		if phone_normalized and not phone_from.startswith("+"):
+			phone_normalized = "+" + phone_normalized
 		
 		if not phone_normalized:
 			_log().error(f"Invalid phone number in payload: {phone_from}")

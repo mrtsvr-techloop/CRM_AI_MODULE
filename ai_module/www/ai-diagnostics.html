@@ -125,13 +125,16 @@
             margin-bottom: 20px;
             font-size: 14px;
         }
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔬 AI Module Diagnostics</h1>
         
-        <div id="user-info" class="user-info hidden">
+        <div id="user-info" class="user-info">
             <strong>Logged in as:</strong> <span id="current-user"></span>
         </div>
         
@@ -209,38 +212,42 @@
             fetch('/api/method/ai_module.api.reset_sessions', {
                 method: 'POST'
             })
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
                 .then(data => {
                     if (data.message) {
                         alert('Sessions reset: ' + data.message.message);
                         runDiagnostics();
+                    } else {
+                        alert('Sessions reset: ' + JSON.stringify(data));
                     }
                 })
                 .catch(error => {
-                    alert('Error: ' + error.message);
+                    console.error('Reset sessions error:', error);
+                    alert('Error resetting sessions: ' + error.message);
                 });
         }
         
-        // Check authentication status on page load
+        // Auto-run diagnostics on page load (user is already authenticated by server-side auth hook)
         window.onload = () => {
+            // Get current user info
             fetch('/api/method/frappe.auth.get_logged_user')
                 .then(response => response.json())
                 .then(data => {
-                    if (data.message && data.message !== 'Guest') {
-                        // User is logged in
+                    if (data.message) {
                         document.getElementById('current-user').textContent = data.message;
-                        document.getElementById('user-info').classList.remove('hidden');
-                        // Auto-run diagnostics
-                        runDiagnostics();
-                    } else {
-                        // User is not logged in - redirect to Frappe login
-                        window.location.href = '/login?redirect-to=' + encodeURIComponent(window.location.pathname);
                     }
                 })
                 .catch(error => {
-                    // If we can't check auth status, redirect to login
-                    window.location.href = '/login?redirect-to=' + encodeURIComponent(window.location.pathname);
+                    console.error('Error getting user info:', error);
                 });
+            
+            // Auto-run diagnostics
+            runDiagnostics();
         };
     </script>
 </body>

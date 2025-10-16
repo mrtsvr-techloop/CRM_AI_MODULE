@@ -501,9 +501,14 @@ def reset_sessions() -> Dict[str, Any]:
 		files_dir = os.path.join(site_path, "private", "files")
 		
 		files_reset = []
-		for filename in ["ai_whatsapp_responses.json", "ai_whatsapp_threads.json", "ai_whatsapp_handoffjson"]:
+		for filename in ["ai_whatsapp_responses.json", "ai_whatsapp_threads.json", "ai_whatsapp_handoff.json"]:
 			filepath = os.path.join(files_dir, filename)
 			if os.path.exists(filepath):
+				with open(filepath, "w") as f:
+					json.dump({}, f)
+				files_reset.append(filename)
+			else:
+				# Create empty file if it doesn't exist
 				with open(filepath, "w") as f:
 					json.dump({}, f)
 				files_reset.append(filename)
@@ -514,4 +519,5 @@ def reset_sessions() -> Dict[str, Any]:
 			"files": files_reset
 		}
 	except Exception as e:
-		frappe.throw(str(e)) 
+		frappe.logger("ai_module.security").error(f"Session reset failed: {str(e)}")
+		frappe.throw(f"Session reset failed: {str(e)}") 

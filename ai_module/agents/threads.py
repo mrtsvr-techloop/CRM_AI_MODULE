@@ -374,15 +374,23 @@ def run_with_responses_api(
 	start_time = time.time()
 	iteration = 0
 	current_response_id = prev_id  # Start with previous conversation's response_id
-	had_tool_calls = False  # Track if any iteration had tool calls
+	tool_results_only: List[Dict[str, Any]] = []  # Track tool results for subsequent calls
 	
 	for _ in range(MAX_ITERATIONS):
 		iteration += 1
 		_log().info(f"AI loop iteration {iteration}/{MAX_ITERATIONS}")
 		
+		# Determine which inputs to send:
+		# - First iteration: full inputs (system + user message)
+		# - Subsequent iterations (tool calling): ONLY tool results
+		# When using previous_response_id, OpenAI already has the conversation context
+		if iteration == 1:
+			inputs_to_send = inputs
+		else:
+			inputs_to_send = tool_results_only
+			_log().debug(f"Sending only tool results ({len(tool_results_only)} items)")
+		
 		# Always use current_response_id for continuity (conversation + tool calling)
-		# According to Responses API docs: after receiving response with tool_call,
-		# send new request with previous_response_id set to that response's ID
 		if current_response_id:
 			_log().debug(f"Using previous_response_id: {current_response_id[:20]}...")
 		else:
@@ -391,16 +399,16 @@ def run_with_responses_api(
 		# Create AI response
 		try:
 			# Debug: log inputs before calling API
-			_log().debug(f"Calling API with {len(inputs)} input messages, prev_id={'Yes' if current_response_id else 'None'}")
-			for idx, inp in enumerate(inputs):
+			_log().debug(f"Calling API with {len(inputs_to_send)} input messages, prev_id={'Yes' if current_response_id else 'None'}")
+			for idx, inp in enumerate(inputs_to_send):
 				role = inp.get("role", "?")
 				_log().debug(f"  Input[{idx}]: role={role}, has_tool_call_id={bool(inp.get('tool_call_id'))}")
 			
-			resp = _create_ai_response(client, model, inputs, tools, current_response_id)
+			resp = _create_ai_response(client, model, inputs_to_send, tools, current_response_id)
 			_log().info(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
 		except BadRequestError as exc:
 			_log().error(f"AI API bad request: {exc}")
-			_log().error(f"Request had {len(inputs)} inputs, prev_id={current_response_id[:20] if current_response_id else 'None'}")
+			_log().error(f"Request had {len(inputs_to_send)} inputs, prev_id={current_response_id[:20] if current_response_id else 'None'}")
 			raise
 		
 		# Update current_response_id for next iteration (tool calling loop continuity)
@@ -416,13 +424,14 @@ def run_with_responses_api(
 		if tool_uses:
 			tool_names = [getattr(t, "name", "unknown") for t in tool_uses]
 			_log().info(f"Executing tools: {', '.join(tool_names)}")
-			had_tool_calls = True  # Mark that this turn had tool calls
 		
 		# Process tool calls if any
 		if tool_uses:
-			# Execute tools and add results to inputs
-			_process_tool_uses(tool_uses, thread_id, inputs)
-			_log().info(f"Tools executed, continuing to next iteration for AI response...")
+			# Clear tool_results_only and populate with new tool results
+			tool_results_only.clear()
+			# Execute tools and add results to tool_results_only (not inputs!)
+			_process_tool_uses(tool_uses, thread_id, tool_results_only)
+			_log().info(f"Tools executed, continuing to next iteration with {len(tool_results_only)} tool results...")
 			
 			# Check timeout
 			if time.time() - start_time > timeout_s:

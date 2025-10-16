@@ -373,25 +373,37 @@ def run_with_responses_api(
 	final_text = ""
 	start_time = time.time()
 	iteration = 0
+	is_first_iteration = True  # Track if this is the first call
+	current_response_id = None  # Track current response ID
 	
 	for _ in range(MAX_ITERATIONS):
 		iteration += 1
 		_log().info(f"AI loop iteration {iteration}/{MAX_ITERATIONS}")
 		
+		# Use previous_response_id ONLY on first iteration (for conversation continuity)
+		# For subsequent iterations (tool calling loop), don't use it
+		request_prev_id = prev_id if is_first_iteration else None
+		
+		if request_prev_id:
+			_log().debug(f"Using previous_response_id: {request_prev_id[:20]}...")
+		else:
+			_log().debug("No previous_response_id (first message or tool calling continuation)")
+		
 		# Create AI response
 		try:
-			resp = _create_ai_response(client, model, inputs, tools, prev_id)
+			resp = _create_ai_response(client, model, inputs, tools, request_prev_id)
 			_log().debug(f"Received response: id={getattr(resp, 'id', 'unknown')[:20]}...")
 		except BadRequestError as exc:
 			_log().exception(f"AI API bad request: {exc}")
 			raise
 		
-		# Save response ID for next turn AND update prev_id for next iteration
+		# Mark that we've done the first iteration
+		is_first_iteration = False
+		
+		# Track current response ID (save to DB only at the end)
 		if getattr(resp, "id", None):
-			prev_id = str(resp.id)  # Update for next iteration in this loop
-			resp_map[thread_id] = prev_id
-			_save_responses_map(resp_map)
-			_log().debug(f"Saved response_id for session {thread_id}: {prev_id[:20]}...")
+			current_response_id = str(resp.id)
+			_log().debug(f"Current response_id: {current_response_id[:20]}...")
 		
 		# Extract tool uses and text
 		parsed = _extract_tool_uses_and_text(resp)
@@ -417,6 +429,12 @@ def run_with_responses_api(
 		final_text = "\n".join(texts).strip()
 		_log().info(f"Final text collected: length={len(final_text)}")
 		break
+	
+	# Save final response ID for next user message (conversation continuity)
+	if current_response_id:
+		resp_map[thread_id] = current_response_id
+		_save_responses_map(resp_map)
+		_log().info(f"Saved final response_id for session {thread_id}: {current_response_id[:20]}...")
 	
 	# Log response
 	_log().info(f"AI response: text_len={len(final_text or '')} session={thread_id}")

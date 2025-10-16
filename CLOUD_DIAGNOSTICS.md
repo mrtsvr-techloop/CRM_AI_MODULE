@@ -2,6 +2,17 @@
 
 Quick diagnostics tool for troubleshooting AI Module on Frappe Cloud without console access.
 
+## 🔒 Security Notice
+
+**IMPORTANT**: This diagnostics page contains **sensitive system information** including:
+- API keys (partially masked)
+- System configuration
+- Error logs
+- Session data
+- Message statistics
+
+**Access is restricted to authenticated users only.** The page requires login credentials and logs all access attempts.
+
 ---
 
 ## 🚀 Quick Start
@@ -26,6 +37,15 @@ https://YOUR-SITE.frappe.cloud/ai-diagnostics
 ```
 
 Replace `YOUR-SITE` with your actual Frappe Cloud site name.
+
+**You will be prompted to login** with your Frappe credentials before accessing the diagnostics.
+
+### 3. Authentication
+
+- Enter your **Frappe username** and **password**
+- Click **Login**
+- The page will automatically run diagnostics after successful authentication
+- Click **Logout** when finished to clear your session
 
 ---
 
@@ -110,6 +130,29 @@ curl https://YOUR-SITE.frappe.cloud/api/method/ai_module.api.run_diagnostics \
 ```bash
 curl -X POST https://YOUR-SITE.frappe.cloud/api/method/ai_module.api.reset_sessions \
   -H "Authorization: token API_KEY:API_SECRET"
+```
+
+**Note**: API access requires authentication token. Use Frappe's API key generation feature.
+
+---
+
+## 🔒 Security Features
+
+### Authentication Required
+- All endpoints require valid Frappe authentication
+- Guest users are automatically blocked
+- Session tokens are used for API calls
+
+### Access Logging
+- All diagnostic access is logged with user and IP
+- Session resets are logged as warnings
+- Logs available in Frappe's Error Log
+
+### Optional Role Restrictions
+To restrict access to System Managers only, uncomment these lines in `api.py`:
+```python
+# if not frappe.has_permission("System Manager"):
+#     frappe.throw("System Manager role required", frappe.PermissionError)
 ```
 
 ---

@@ -270,7 +270,23 @@ def run_diagnostics() -> Dict[str, Any]:
 	
 	Returns comprehensive health check of AI Module components.
 	Accessible via: /api/method/ai_module.api.run_diagnostics
+	
+	SECURITY: Requires authenticated user. Contains sensitive system information.
 	"""
+	# Additional security check - ensure user is not Guest
+	if frappe.session.user == "Guest":
+		frappe.throw("Authentication required", frappe.PermissionError)
+	
+	# Security logging - track access to sensitive diagnostics
+	frappe.logger("ai_module.security").info(
+		f"Diagnostics accessed by user: {frappe.session.user} from IP: {frappe.local.request.environ.get('REMOTE_ADDR', 'unknown')}"
+	)
+	
+	# Optional: Add role-based access control
+	# Uncomment if you want to restrict to specific roles
+	# if not frappe.has_permission("System Manager"):
+	#     frappe.throw("System Manager role required", frappe.PermissionError)
+	
 	import json
 	import os
 	import inspect
@@ -460,7 +476,23 @@ def reset_sessions() -> Dict[str, Any]:
 	
 	Clears conversation history by resetting session files.
 	Accessible via: /api/method/ai_module.api.reset_sessions
+	
+	SECURITY: Requires authenticated user. Can destroy conversation data.
 	"""
+	# Additional security check - ensure user is not Guest
+	if frappe.session.user == "Guest":
+		frappe.throw("Authentication required", frappe.PermissionError)
+	
+	# Security logging - track destructive operations
+	frappe.logger("ai_module.security").warning(
+		f"Session reset initiated by user: {frappe.session.user} from IP: {frappe.local.request.environ.get('REMOTE_ADDR', 'unknown')}"
+	)
+	
+	# Optional: Add role-based access control for destructive operations
+	# Uncomment if you want to restrict to specific roles
+	# if not frappe.has_permission("System Manager"):
+	#     frappe.throw("System Manager role required for session reset", frappe.PermissionError)
+	
 	import json
 	import os
 	

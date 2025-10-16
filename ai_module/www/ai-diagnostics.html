@@ -21,6 +21,41 @@
             color: #2c3e50;
             margin-top: 0;
         }
+        .auth-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .auth-section h3 {
+            margin-top: 0;
+            color: #856404;
+        }
+        .login-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .login-form input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .login-form button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .login-form button:hover {
+            background: #0056b3;
+        }
         .status {
             padding: 15px;
             border-radius: 6px;
@@ -112,26 +147,115 @@
             overflow-x: auto;
             font-size: 12px;
         }
+        .hidden {
+            display: none;
+        }
+        .error {
+            color: #dc3545;
+            font-size: 14px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🔬 AI Module Diagnostics</h1>
         
-        <div>
-            <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
-            <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+        <!-- Authentication Section -->
+        <div id="auth-section" class="auth-section">
+            <h3>🔐 Authentication Required</h3>
+            <p>This page contains sensitive system information. Please authenticate to continue.</p>
+            <div class="login-form">
+                <input type="text" id="username" placeholder="Username" />
+                <input type="password" id="password" placeholder="Password" />
+                <button onclick="authenticate()">Login</button>
+            </div>
+            <div id="auth-error" class="error hidden"></div>
         </div>
         
-        <div id="results"></div>
+        <!-- Main Content (Hidden until authenticated) -->
+        <div id="main-content" class="hidden">
+            <div>
+                <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
+                <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+                <button onclick="logout()" style="background: #6c757d;">🚪 Logout</button>
+            </div>
+            
+            <div id="results"></div>
+        </div>
     </div>
 
     <script>
+        let authToken = null;
+        
+        function authenticate() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('auth-error');
+            
+            if (!username || !password) {
+                errorDiv.textContent = 'Please enter both username and password';
+                errorDiv.classList.remove('hidden');
+                return;
+            }
+            
+            // Try to login via Frappe's login API
+            fetch('/api/method/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    usr: username,
+                    pwd: password
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message && data.message.login_token) {
+                    authToken = data.message.login_token;
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('main-content').classList.remove('hidden');
+                    errorDiv.classList.add('hidden');
+                    // Auto-run diagnostics after login
+                    runDiagnostics();
+                } else {
+                    errorDiv.textContent = 'Invalid credentials';
+                    errorDiv.classList.remove('hidden');
+                }
+            })
+            .catch(error => {
+                errorDiv.textContent = 'Login failed: ' + error.message;
+                errorDiv.classList.remove('hidden');
+            });
+        }
+        
+        function logout() {
+            authToken = null;
+            document.getElementById('auth-section').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        }
+        
+        function getAuthHeaders() {
+            if (!authToken) {
+                throw new Error('Not authenticated');
+            }
+            return {
+                'Authorization': `token ${authToken}`,
+                'Content-Type': 'application/json'
+            };
+        }
+        
         function runDiagnostics() {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">Running diagnostics...</div>';
             
-            fetch('/api/method/ai_module.api.run_diagnostics')
+            fetch('/api/method/ai_module.api.run_diagnostics', {
+                headers: getAuthHeaders()
+            })
                 .then(response => response.json())
                 .then(data => {
                     if (data.message) {
@@ -141,7 +265,11 @@
                     }
                 })
                 .catch(error => {
-                    resultsDiv.innerHTML = '<div class="status fail">Error: ' + error.message + '</div>';
+                    if (error.message === 'Not authenticated') {
+                        logout();
+                    } else {
+                        resultsDiv.innerHTML = '<div class="status fail">Error: ' + error.message + '</div>';
+                    }
                 });
         }
         
@@ -190,7 +318,8 @@
             }
             
             fetch('/api/method/ai_module.api.reset_sessions', {
-                method: 'POST'
+                method: 'POST',
+                headers: getAuthHeaders()
             })
                 .then(response => response.json())
                 .then(data => {
@@ -200,12 +329,31 @@
                     }
                 })
                 .catch(error => {
-                    alert('Error: ' + error.message);
+                    if (error.message === 'Not authenticated') {
+                        logout();
+                    } else {
+                        alert('Error: ' + error.message);
+                    }
                 });
         }
         
-        // Auto-run on load
-        window.onload = () => runDiagnostics();
+        // Check if already authenticated (if page was refreshed)
+        window.onload = () => {
+            // Check if we have a valid session cookie
+            fetch('/api/method/frappe.auth.get_logged_user')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message && data.message !== 'Guest') {
+                        // Already logged in, hide auth section
+                        document.getElementById('auth-section').classList.add('hidden');
+                        document.getElementById('main-content').classList.remove('hidden');
+                        runDiagnostics();
+                    }
+                })
+                .catch(() => {
+                    // Not authenticated, show login form
+                });
+        };
     </script>
 </body>
 </html>

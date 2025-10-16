@@ -229,9 +229,9 @@ before_job = ["ai_module.agents.bootstrap.before_job"]
 # Authentication and authorization
 # --------------------------------
 
-auth_hooks = [
-	"ai_module.auth.validate_page_access"
-]
+# auth_hooks = [
+# 	"ai_module.auth.validate_page_access"
+# ]
 
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True

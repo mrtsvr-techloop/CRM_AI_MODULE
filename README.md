@@ -316,6 +316,34 @@ INFO ai_module.threads: AI response: text_len=234 session=session_1729016216789
 INFO ai_module.whatsapp: Created outbound message: WHATSAPP-MSG-0002
 ```
 
+## 🔧 AI Diagnostic (Debug Cloud)
+
+**Data**: 16/01/2025  
+**Path**: `/ai-diagnostics`
+
+Pagina web per diagnosticare problemi dell'AI Module su Frappe Cloud senza accesso alla console. 
+
+### Cosa fa:
+- **Verifica codice deployato** - Controlla se il codice aggiornato è live
+- **Controlla API Key** - Verifica configurazione OpenAI
+- **Monitora settings** - Stato AutoReply e configurazioni
+- **Analizza sessioni** - Conta conversazioni attive
+- **Statistiche messaggi** - Messaggi WhatsApp in/out ultimi 24h
+- **Errori recenti** - Ultimi errori AI Module (2h)
+
+### Perché serve:
+Su Frappe Cloud non hai accesso a `bench console` per vedere i log. Questa pagina ti permette di:
+- Capire se il problema è nel codice o nella configurazione
+- Vedere se l'AI sta ricevendo messaggi ma non risponde
+- Identificare errori specifici senza accesso ai log
+- Resetare le sessioni se bloccate
+
+### Come usare:
+1. Vai su `https://TUO-SITO.frappe.cloud/ai-diagnostics`
+2. Se non loggato, Frappe ti porta al login
+3. La pagina mostra lo stato di tutti i componenti
+4. Usa "Reset Sessions" se le conversazioni sono bloccate
+
 ## 🧪 Development
 
 ### Pre-commit Hooks

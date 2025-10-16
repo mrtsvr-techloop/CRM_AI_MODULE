@@ -1,0 +1,53 @@
+POST https://techloopdevelop.f.frappe.cloud/api/method/crm.api.whatsapp.get_whatsapp_messages 500 (Internal Server Error)
+hee @ request.js:30
+RWe @ frappeRequest.js:5
+a @ resources.js:99
+(anonymous) @ Activities.vue:586
+Yn.emit @ index.js:136
+emitEvent @ socket.js:538
+onevent @ socket.js:525
+onpacket @ socket.js:495
+Yn.emit @ index.js:136
+(anonymous) @ manager.js:209
+Promise.then
+(anonymous) @ globals.js:4
+ondecoded @ manager.js:208
+Yn.emit @ index.js:136
+add @ index.js:146
+ondata @ manager.js:195
+Yn.emit @ index.js:136
+_onPacket @ socket.js:259
+Yn.emit @ index.js:136
+onPacket @ transport.js:99
+onData @ transport.js:91
+ws.onmessage @ websocket.js:48
+frappeRequest.js:77 Traceback (most recent call last):
+  File "apps/frappe/frappe/app.py", line 115, in application
+    response = frappe.api.handle(request)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/api/__init__.py", line 50, in handle
+    data = endpoint(**arguments)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/api/v1.py", line 36, in handle_rpc_call
+    return frappe.handler.handle()
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/handler.py", line 52, in handle
+    data = execute_cmd(cmd)
+           ^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/handler.py", line 85, in execute_cmd
+    return frappe.call(method, **frappe.form_dict)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/__init__.py", line 1754, in call
+    return fn(*args, **newargs)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "apps/frappe/frappe/utils/typing_validations.py", line 32, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "apps/crm/crm/api/whatsapp.py", line 237, in get_whatsapp_messages
+    from_name = get_from_name(reply_message) if replied_message["from"] else _("You")
+                                                ~~~~~~~~~~~~~~~^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+
+frappeRequest.js:81 Uncaught (in promise) Error: /api/method/crm.api.whatsapp.get_whatsapp_messages TypeError
+    at Object.transformResponse (frappeRequest.js:81:17)
+    at async Proxy.a (resources.js:103:18)

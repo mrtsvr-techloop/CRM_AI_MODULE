@@ -131,7 +131,7 @@
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">Running diagnostics...</div>';
             
-            fetch('/api/method/ai_module.ai_module.api_diagnostics.run_diagnostics')
+            fetch('/api/method/ai_module.api.run_diagnostics')
                 .then(response => response.json())
                 .then(data => {
                     if (data.message) {
@@ -189,7 +189,7 @@
                 return;
             }
             
-            fetch('/api/method/ai_module.ai_module.api_diagnostics.reset_sessions', {
+            fetch('/api/method/ai_module.api.reset_sessions', {
                 method: 'POST'
             })
                 .then(response => response.json())

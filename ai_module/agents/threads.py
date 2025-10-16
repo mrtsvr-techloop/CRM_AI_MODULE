@@ -318,9 +318,20 @@ def run_with_responses_api(
 	"""
 	from .assistant_update import get_current_instructions
 	from .assistant_spec import get_assistant_tools
-	from .config import get_environment
+	from .config import apply_environment, get_environment
 	
-	client = OpenAI()
+	# Apply environment variables (critical for OpenAI client initialization)
+	apply_environment()
+	
+	# Get config
+	env = get_environment()
+	api_key = env.get("OPENAI_API_KEY")
+	
+	if not api_key:
+		raise ValueError("OPENAI_API_KEY not configured. Set it in AI Assistant Settings or environment variables.")
+	
+	# Create OpenAI client with explicit API key
+	client = OpenAI(api_key=api_key)
 	thread_id = _ensure_thread_id(session_id)
 	
 	# Log request
@@ -334,7 +345,7 @@ def run_with_responses_api(
 	
 	# Get tools and model config
 	tools = _coerce_tools_for_responses(get_assistant_tools())
-	model = get_environment().get("AI_ASSISTANT_MODEL") or DEFAULT_MODEL
+	model = env.get("AI_ASSISTANT_MODEL") or DEFAULT_MODEL
 	
 	# Load previous response ID for continuity
 	resp_map = _load_responses_map()

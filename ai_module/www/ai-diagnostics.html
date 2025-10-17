@@ -2,27 +2,52 @@
 
 {% block title %}AI Module Diagnostics{% endblock %}
 
+{% block navbar %}{% endblock %}
+
 {% block head %}
 {% endblock %}
 
 {% block page_content %}
     <style>
+        /* Reset and base styles */
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            max-width: 900px;
-            margin: 50px auto;
-            padding: 20px;
+            margin: 0;
+            padding: 0;
             background: #f5f7fa;
+            min-height: 100vh;
         }
+        
+        /* Hide Frappe navbar completely */
+        .navbar {
+            display: none !important;
+        }
+        
+        /* Main container */
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
         .container {
             background: white;
             border-radius: 8px;
             padding: 30px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
         }
+        
         h1 {
             color: #2c3e50;
             margin-top: 0;
+            text-align: center;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e1e8ed;
         }
         .status {
             padding: 15px;
@@ -93,6 +118,12 @@
         }
         button.danger:hover {
             background: #c82333;
+        }
+        button.test-button {
+            background: #28a745;
+        }
+        button.test-button:hover {
+            background: #218838;
         }
         button:disabled {
             background: #6c757d;
@@ -304,36 +335,67 @@
             word-wrap: break-word;
         }
     </style>
-    <div class="container">
-        <h1>🔬 AI Module Diagnostics</h1>
-        
-        <div class="tab-buttons">
-            <button onclick="showTab('diagnostics')" id="diagnosticsTab" class="tab-button active">🔍 Diagnostics</button>
-            <button onclick="showTab('memory')" id="memoryTab" class="tab-button">🧠 Memory Viewer</button>
-        </div>
-        
-        <div id="diagnosticsContent" class="tab-content">
-            <div>
-                <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
-                <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+    
+    <div class="main-container">
+        <div class="container">
+            <h1>🔬 AI Module Diagnostics</h1>
+            
+            <div class="tab-buttons">
+                <button onclick="showTab('diagnostics')" id="diagnosticsTab" class="tab-button active">🔍 Diagnostics</button>
+                <button onclick="showTab('memory')" id="memoryTab" class="tab-button">🧠 Memory Viewer</button>
             </div>
-        </div>
-        
-        <div id="memoryContent" class="tab-content" style="display: none;">
-            <div class="search-section">
-                <h3>Search Conversation</h3>
-                <div class="search-form">
-                    <input type="text" id="phoneInput" placeholder="Enter phone number (e.g., +393401234567)" />
-                    <button onclick="searchConversation()">🔍 Search</button>
-                    <button onclick="listAllConversations()">📋 List All</button>
+            
+            <div id="diagnosticsContent" class="tab-content">
+                <div>
+                    <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
+                    <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
                 </div>
             </div>
+            
+            <div id="memoryContent" class="tab-content" style="display: none;">
+                <div class="search-section">
+                    <h3>Search Conversation</h3>
+                    <div class="search-form">
+                        <input type="text" id="phoneInput" placeholder="Enter phone number (e.g., +393401234567)" />
+                        <button onclick="searchConversation()">🔍 Search</button>
+                        <button onclick="listAllConversations()">📋 List All</button>
+                        <button onclick="testAPI()" class="test-button">🧪 Test API</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="results"></div>
         </div>
-        
-        <div id="results"></div>
     </div>
 
     <script>
+        // Test function availability
+        function testAPI() {
+            console.log('Testing function availability...');
+            
+            // Check if frappe is available
+            if (typeof frappe === 'undefined') {
+                showError('Frappe framework not loaded');
+                return;
+            }
+            
+            frappe.call({
+                method: 'ai_module.www.ai-diagnostics.list_conversations',
+                callback: function(response) {
+                    if (response.message) {
+                        console.log('✅ Functions are available');
+                        showSuccess('Functions are available and ready to use');
+                    } else {
+                        showError('Functions not available');
+                    }
+                },
+                error: function(error) {
+                    console.error('❌ Function test failed:', error);
+                    showError('Functions not available: ' + error.message);
+                }
+            });
+        }
+        
         // Tab management
         function showTab(tabName) {
             // Hide all tab contents
@@ -356,7 +418,7 @@
             document.getElementById('results').innerHTML = '';
         }
         
-        // Memory functions
+        // Memory functions - calling Python functions via frappe.call
         function searchConversation() {
             const phoneInput = document.getElementById('phoneInput');
             const phoneNumber = phoneInput.value.trim();
@@ -366,41 +428,60 @@
                 return;
             }
             
+            // Check if frappe is available
+            if (typeof frappe === 'undefined') {
+                showError('Frappe framework not loaded');
+                return;
+            }
+            
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">Searching conversation...</div>';
             
-            fetch(`/api/method/ai_module.api.get_conversation_memory?phone_number=${encodeURIComponent(phoneNumber)}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayConversation(data.conversation);
+            frappe.call({
+                method: 'ai_module.www.ai-diagnostics.search_conversation',
+                args: {
+                    phone_number: phoneNumber
+                },
+                callback: function(response) {
+                    console.log('Function result:', response);
+                    if (response.message && response.message.success) {
+                        displayConversation(response.message.conversation);
                     } else {
-                        showError(data.error || 'Conversation not found');
+                        showError(response.message?.error || 'Conversation not found');
                     }
-                })
-                .catch(error => {
-                    console.error('Search error:', error);
-                    showError('Error searching conversation: ' + error.message);
-                });
+                },
+                error: function(error) {
+                    console.error('Function call error:', error);
+                    showError('Error calling function: ' + error.message);
+                }
+            });
         }
         
         function listAllConversations() {
+            // Check if frappe is available
+            if (typeof frappe === 'undefined') {
+                showError('Frappe framework not loaded');
+                return;
+            }
+            
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">Loading all conversations...</div>';
             
-            fetch('/api/method/ai_module.api.list_all_conversations')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayConversationsList(data.conversations);
+            frappe.call({
+                method: 'ai_module.www.ai-diagnostics.list_conversations',
+                callback: function(response) {
+                    console.log('Function result:', response);
+                    if (response.message && response.message.success) {
+                        displayConversationsList(response.message.conversations);
                     } else {
-                        showError(data.error || 'Failed to load conversations');
+                        showError(response.message?.error || 'Failed to load conversations');
                     }
-                })
-                .catch(error => {
-                    console.error('List error:', error);
-                    showError('Error loading conversations: ' + error.message);
-                });
+                },
+                error: function(error) {
+                    console.error('Function call error:', error);
+                    showError('Error calling function: ' + error.message);
+                }
+            });
         }
         
         function displayConversation(conversation) {
@@ -529,6 +610,11 @@
         function showError(message) {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = `<div class="error">❌ ${message}</div>`;
+        }
+        
+        function showSuccess(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="status pass">✅ ${message}</div>`;
         }
         
         // Diagnostics functions

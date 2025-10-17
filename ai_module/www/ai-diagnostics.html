@@ -132,6 +132,7 @@
     <div class="container">
         <h1>🔬 AI Module Diagnostics</h1>
         
+        {% if user and user != "Guest" %}
         <div id="user-info" class="user-info">
             <strong>Logged in as:</strong> {{ user }}
         </div>
@@ -142,6 +143,12 @@
         </div>
         
         <div id="results"></div>
+        {% else %}
+        <div class="status fail">
+            <strong>Authentication Required</strong><br>
+            Please log in to access AI Module Diagnostics.
+        </div>
+        {% endif %}
     </div>
 
     <script>
@@ -230,9 +237,11 @@
                 });
         }
         
-        // Auto-run diagnostics on page load (user is already authenticated by server-side template)
+        // Auto-run diagnostics on page load (only if user is authenticated)
         window.onload = () => {
+            {% if user and user != "Guest" %}
             runDiagnostics();
+            {% endif %}
         };
     </script>
 {% endblock %}

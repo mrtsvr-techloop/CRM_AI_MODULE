@@ -13,7 +13,7 @@ def get_context():
 	This function is called by Frappe when rendering the page.
 	It handles authentication and provides context data.
 	"""
-	# Check if user is authenticated
+	# Check if user is authenticated - redirect to login if not
 	if frappe.session.user == "Guest":
 		# Redirect to login page with return URL
 		frappe.local.response["type"] = "redirect"

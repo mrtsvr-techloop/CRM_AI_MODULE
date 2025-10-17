@@ -354,23 +354,39 @@ def run_diagnostics() -> Dict[str, Any]:
 	
 	# Test 4: Session files
 	try:
-		site_path = frappe.utils.get_site_path()
-		files_dir = os.path.join(site_path, "private", "files")
+		files_dir = frappe.utils.get_site_path("private", "files")
 		
-		response_file = os.path.join(files_dir, "ai_whatsapp_responses.json")
-		sessions_count = 0
+		# Check the correct session files
+		session_files = {
+			"threads": "ai_whatsapp_threads.json",
+			"language": "ai_whatsapp_lang.json", 
+			"profile": "ai_whatsapp_profile.json",
+			"handoff": "ai_whatsapp_handoff.json"
+		}
 		
-		if os.path.exists(response_file):
-			with open(response_file, "r") as f:
-				content = f.read().strip()
-			if content:
-				data = json.loads(content)
-				sessions_count = len(data)
+		total_sessions = 0
+		file_status = {}
+		
+		for file_type, filename in session_files.items():
+			filepath = os.path.join(files_dir, filename)
+			count = 0
+			if os.path.exists(filepath):
+				try:
+					with open(filepath, "r", encoding="utf-8") as f:
+						content = f.read().strip()
+					if content:
+						data = json.loads(content)
+						count = len(data)
+				except Exception:
+					count = 0
+			file_status[file_type] = count
+			total_sessions += count
 		
 		results["tests"]["session_files"] = {
 			"status": "pass",
-			"sessions": sessions_count,
-			"message": f"{sessions_count} active sessions"
+			"sessions": total_sessions,
+			"details": file_status,
+			"message": f"{total_sessions} total active sessions"
 		}
 	except Exception as e:
 		results["tests"]["session_files"] = {
@@ -497,21 +513,29 @@ def reset_sessions() -> Dict[str, Any]:
 	import os
 	
 	try:
-		site_path = frappe.utils.get_site_path()
-		files_dir = os.path.join(site_path, "private", "files")
+		# Ensure the files directory exists
+		files_dir = frappe.utils.get_site_path("private", "files")
+		os.makedirs(files_dir, exist_ok=True)
+		
+		# Use the correct file names from the WhatsApp integration
+		files_to_reset = [
+			"ai_whatsapp_threads.json",      # phone -> session_id mapping
+			"ai_whatsapp_lang.json",         # phone -> language mapping  
+			"ai_whatsapp_profile.json",     # phone -> profile mapping
+			"ai_whatsapp_handoff.json",     # phone -> last_human_activity mapping
+		]
 		
 		files_reset = []
-		for filename in ["ai_whatsapp_responses.json", "ai_whatsapp_threads.json", "ai_whatsapp_handoff.json"]:
+		for filename in files_to_reset:
 			filepath = os.path.join(files_dir, filename)
-			if os.path.exists(filepath):
-				with open(filepath, "w") as f:
+			try:
+				# Write empty JSON object to reset the file
+				with open(filepath, "w", encoding="utf-8") as f:
 					json.dump({}, f)
 				files_reset.append(filename)
-			else:
-				# Create empty file if it doesn't exist
-				with open(filepath, "w") as f:
-					json.dump({}, f)
-				files_reset.append(filename)
+			except Exception as file_error:
+				frappe.logger("ai_module").error(f"Failed to reset {filename}: {str(file_error)}")
+				# Continue with other files even if one fails
 		
 		return {
 			"status": "success",

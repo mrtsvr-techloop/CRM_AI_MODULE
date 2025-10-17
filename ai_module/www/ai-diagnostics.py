@@ -24,5 +24,6 @@ def get_context():
 	context = frappe._dict()
 	context.user = frappe.session.user
 	context.site_name = frappe.local.site
+	context.csrf_token = frappe.sessions.get_csrf_token()
 	
 	return context

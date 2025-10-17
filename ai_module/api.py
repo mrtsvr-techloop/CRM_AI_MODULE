@@ -495,24 +495,24 @@ def reset_sessions() -> Dict[str, Any]:
 	
 	SECURITY: Requires authenticated user. Can destroy conversation data.
 	"""
-	# Additional security check - ensure user is not Guest
-	if frappe.session.user == "Guest":
-		frappe.throw("Authentication required", frappe.PermissionError)
-	
-	# Security logging - track destructive operations
-	frappe.logger("ai_module.security").warning(
-		f"Session reset initiated by user: {frappe.session.user} from IP: {frappe.local.request.environ.get('REMOTE_ADDR', 'unknown')}"
-	)
-	
-	# Optional: Add role-based access control for destructive operations
-	# Uncomment if you want to restrict to specific roles
-	# if not frappe.has_permission("System Manager"):
-	#     frappe.throw("System Manager role required for session reset", frappe.PermissionError)
-	
-	import json
-	import os
-	
 	try:
+		# Additional security check - ensure user is not Guest
+		if frappe.session.user == "Guest":
+			frappe.throw("Authentication required", frappe.PermissionError)
+		
+		# Security logging - track destructive operations
+		frappe.logger("ai_module.security").warning(
+			f"Session reset initiated by user: {frappe.session.user} from IP: {frappe.local.request.environ.get('REMOTE_ADDR', 'unknown')}"
+		)
+		
+		# Optional: Add role-based access control for destructive operations
+		# Uncomment if you want to restrict to specific roles
+		# if not frappe.has_permission("System Manager"):
+		#     frappe.throw("System Manager role required for session reset", frappe.PermissionError)
+		
+		import json
+		import os
+		
 		# Ensure the files directory exists
 		files_dir = frappe.utils.get_site_path("private", "files")
 		os.makedirs(files_dir, exist_ok=True)
@@ -526,6 +526,8 @@ def reset_sessions() -> Dict[str, Any]:
 		]
 		
 		files_reset = []
+		files_errors = []
+		
 		for filename in files_to_reset:
 			filepath = os.path.join(files_dir, filename)
 			try:
@@ -534,14 +536,24 @@ def reset_sessions() -> Dict[str, Any]:
 					json.dump({}, f)
 				files_reset.append(filename)
 			except Exception as file_error:
-				frappe.logger("ai_module").error(f"Failed to reset {filename}: {str(file_error)}")
+				error_msg = f"Failed to reset {filename}: {str(file_error)}"
+				frappe.logger("ai_module").error(error_msg)
+				files_errors.append(error_msg)
 				# Continue with other files even if one fails
 		
-		return {
+		result = {
 			"status": "success",
 			"message": f"Reset {len(files_reset)} session files",
 			"files": files_reset
 		}
+		
+		if files_errors:
+			result["warnings"] = files_errors
+			result["message"] += f" (with {len(files_errors)} warnings)"
+		
+		return result
+		
 	except Exception as e:
-		frappe.logger("ai_module.security").error(f"Session reset failed: {str(e)}")
-		frappe.throw(f"Session reset failed: {str(e)}") 
+		error_msg = f"Session reset failed: {str(e)}"
+		frappe.logger("ai_module.security").error(error_msg)
+		frappe.throw(error_msg) 

@@ -1,0 +1,325 @@
+{% extends "templates/web.html" %}
+
+{% block title %}AI Memory Viewer{% endblock %}
+
+{% block page_content %}
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            margin-top: 0;
+        }
+        .search-section {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .search-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-form input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        .search-form button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .search-form button:hover {
+            background: #0056b3;
+        }
+        .search-form button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        .conversation-info {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .conversation-info h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .info-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #e1e8ed;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #6c757d;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .info-value {
+            color: #2c3e50;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+        .conversations-list {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .conversations-list h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .conversation-item {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .conversation-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        }
+        .conversation-item.selected {
+            border-color: #007bff;
+            background: #e7f3ff;
+        }
+        .conversation-phone {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .conversation-thread {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        .conversation-status {
+            font-size: 12px;
+            color: #28a745;
+            margin-top: 4px;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            border: 1px solid #e1e8ed;
+        }
+    </style>
+    
+    <div class="container">
+        <h1>🧠 AI Memory Viewer</h1>
+        
+        <div class="search-section">
+            <h3>Search Conversation</h3>
+            <div class="search-form">
+                <input type="text" id="phoneInput" placeholder="Enter phone number (e.g., +393401234567)" />
+                <button onclick="searchConversation()">🔍 Search</button>
+                <button onclick="listAllConversations()">📋 List All</button>
+            </div>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function searchConversation() {
+            const phoneInput = document.getElementById('phoneInput');
+            const phoneNumber = phoneInput.value.trim();
+            
+            if (!phoneNumber) {
+                showError('Please enter a phone number');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Searching conversation...</div>';
+            
+            fetch(`/api/method/ai_module.api.get_conversation_memory?phone_number=${encodeURIComponent(phoneNumber)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayConversation(data.conversation);
+                    } else {
+                        showError(data.error || 'Conversation not found');
+                    }
+                })
+                .catch(error => {
+                    console.error('Search error:', error);
+                    showError('Error searching conversation: ' + error.message);
+                });
+        }
+        
+        function listAllConversations() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Loading all conversations...</div>';
+            
+            fetch('/api/method/ai_module.api.list_all_conversations')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayConversationsList(data.conversations);
+                    } else {
+                        showError(data.error || 'Failed to load conversations');
+                    }
+                })
+                .catch(error => {
+                    console.error('List error:', error);
+                    showError('Error loading conversations: ' + error.message);
+                });
+        }
+        
+        function displayConversation(conversation) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = `
+                <div class="conversation-info">
+                    <h3>📞 Conversation Details</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Phone Number</div>
+                            <div class="info-value">${conversation.phone_number}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Thread ID</div>
+                            <div class="info-value">${conversation.thread_id}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Last Response ID</div>
+                            <div class="info-value">${conversation.last_response_id || 'None'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Language</div>
+                            <div class="info-value">${conversation.language || 'Unknown'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            if (conversation.profile && Object.keys(conversation.profile).length > 0) {
+                html += `
+                    <div class="conversation-info">
+                        <h3>👤 Profile Data</h3>
+                        <pre>${JSON.stringify(conversation.profile, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (conversation.handoff && Object.keys(conversation.handoff).length > 0) {
+                html += `
+                    <div class="conversation-info">
+                        <h3>🤝 Handoff Data</h3>
+                        <pre>${JSON.stringify(conversation.handoff, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function displayConversationsList(conversations) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (conversations.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-data">No active conversations found</div>';
+                return;
+            }
+            
+            let html = `
+                <div class="conversations-list">
+                    <h3>📋 All Active Conversations (${conversations.length})</h3>
+            `;
+            
+            conversations.forEach(conv => {
+                html += `
+                    <div class="conversation-item" onclick="selectConversation('${conv.phone_number}')">
+                        <div class="conversation-phone">${conv.phone_number}</div>
+                        <div class="conversation-thread">Thread: ${conv.thread_id}</div>
+                        <div class="conversation-status">${conv.has_response ? '✅ Has Response' : '⏳ No Response'}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+        
+        function selectConversation(phoneNumber) {
+            // Highlight selected conversation
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.target.closest('.conversation-item').classList.add('selected');
+            
+            // Set phone number in input and search
+            document.getElementById('phoneInput').value = phoneNumber;
+            searchConversation();
+        }
+        
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="error">❌ ${message}</div>`;
+        }
+        
+        // Allow Enter key to search
+        document.getElementById('phoneInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchConversation();
+            }
+        });
+    </script>
+{% endblock %}

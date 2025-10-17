@@ -3,7 +3,6 @@
 {% block title %}AI Module Diagnostics{% endblock %}
 
 {% block head %}
-<meta name="csrf-token" content="{{ csrf_token }}">
 {% endblock %}
 
 {% block page_content %}
@@ -132,30 +131,407 @@
         .hidden {
             display: none;
         }
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e1e8ed;
+        }
+        .tab-button {
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #6c757d;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .tab-button:hover {
+            color: #007bff;
+            background: #f8f9fa;
+        }
+        .tab-button.active {
+            color: #007bff;
+            border-bottom-color: #007bff;
+            background: white;
+        }
+        .tab-content {
+            margin-top: 20px;
+        }
+        .search-section {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .search-form {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .search-form input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            min-width: 200px;
+        }
+        .conversation-info {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .conversation-info h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .info-item {
+            background: white;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #e1e8ed;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #6c757d;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        .info-value {
+            color: #2c3e50;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+        .conversations-list {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .conversation-item {
+            background: white;
+            border: 1px solid #e1e8ed;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .conversation-item:hover {
+            border-color: #007bff;
+            box-shadow: 0 2px 4px rgba(0,123,255,0.1);
+        }
+        .conversation-item.selected {
+            border-color: #007bff;
+            background: #e7f3ff;
+        }
+        .conversation-phone {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+        .conversation-thread {
+            font-size: 12px;
+            color: #6c757d;
+            margin-top: 4px;
+        }
+        .conversation-status {
+            font-size: 12px;
+            color: #28a745;
+            margin-top: 4px;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+            background: #f8f9fa;
+            border-radius: 6px;
+        }
+        .message-history {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e1e8ed;
+            border-radius: 6px;
+            padding: 10px;
+            background: #f8f9fa;
+        }
+        .message-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #e1e8ed;
+        }
+        .message-item.user-message {
+            background: #e7f3ff;
+            border-color: #b3d9ff;
+            margin-left: 20px;
+        }
+        .message-item.assistant-message {
+            background: #f0f8f0;
+            border-color: #c3e6cb;
+            margin-right: 20px;
+        }
+        .message-item.system-message {
+            background: #fff3cd;
+            border-color: #ffeaa7;
+        }
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        .message-role {
+            font-weight: bold;
+            color: #495057;
+        }
+        .message-timestamp {
+            color: #6c757d;
+        }
+        .message-content {
+            color: #2c3e50;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
     </style>
     <div class="container">
         <h1>🔬 AI Module Diagnostics</h1>
         
-        {% if user and user != "Guest" %}
-        <div id="user-info" class="user-info">
-            <strong>Logged in as:</strong> {{ user }}
+        <div class="tab-buttons">
+            <button onclick="showTab('diagnostics')" id="diagnosticsTab" class="tab-button active">🔍 Diagnostics</button>
+            <button onclick="showTab('memory')" id="memoryTab" class="tab-button">🧠 Memory Viewer</button>
         </div>
         
-        <div>
-            <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
-            <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+        <div id="diagnosticsContent" class="tab-content">
+            <div>
+                <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
+                <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+            </div>
+        </div>
+        
+        <div id="memoryContent" class="tab-content" style="display: none;">
+            <div class="search-section">
+                <h3>Search Conversation</h3>
+                <div class="search-form">
+                    <input type="text" id="phoneInput" placeholder="Enter phone number (e.g., +393401234567)" />
+                    <button onclick="searchConversation()">🔍 Search</button>
+                    <button onclick="listAllConversations()">📋 List All</button>
+                </div>
+            </div>
         </div>
         
         <div id="results"></div>
-        {% else %}
-        <div class="status fail">
-            <strong>Authentication Required</strong><br>
-            Please log in to access AI Module Diagnostics.
-        </div>
-        {% endif %}
     </div>
 
     <script>
+        // Tab management
+        function showTab(tabName) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            
+            // Remove active class from all tab buttons
+            document.querySelectorAll('.tab-button').forEach(button => {
+                button.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabName + 'Content').style.display = 'block';
+            
+            // Add active class to selected tab button
+            document.getElementById(tabName + 'Tab').classList.add('active');
+            
+            // Clear results when switching tabs
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        // Memory functions
+        function searchConversation() {
+            const phoneInput = document.getElementById('phoneInput');
+            const phoneNumber = phoneInput.value.trim();
+            
+            if (!phoneNumber) {
+                showError('Please enter a phone number');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Searching conversation...</div>';
+            
+            fetch(`/api/method/ai_module.api.get_conversation_memory?phone_number=${encodeURIComponent(phoneNumber)}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayConversation(data.conversation);
+                    } else {
+                        showError(data.error || 'Conversation not found');
+                    }
+                })
+                .catch(error => {
+                    console.error('Search error:', error);
+                    showError('Error searching conversation: ' + error.message);
+                });
+        }
+        
+        function listAllConversations() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Loading all conversations...</div>';
+            
+            fetch('/api/method/ai_module.api.list_all_conversations')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayConversationsList(data.conversations);
+                    } else {
+                        showError(data.error || 'Failed to load conversations');
+                    }
+                })
+                .catch(error => {
+                    console.error('List error:', error);
+                    showError('Error loading conversations: ' + error.message);
+                });
+        }
+        
+        function displayConversation(conversation) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = `
+                <div class="conversation-info">
+                    <h3>📞 Conversation Details</h3>
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">Phone Number</div>
+                            <div class="info-value">${conversation.phone_number}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Thread ID</div>
+                            <div class="info-value">${conversation.thread_id}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Last Response ID</div>
+                            <div class="info-value">${conversation.last_response_id || 'None'}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Language</div>
+                            <div class="info-value">${conversation.language || 'Unknown'}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            if (conversation.profile && Object.keys(conversation.profile).length > 0) {
+                html += `
+                    <div class="conversation-info">
+                        <h3>👤 Profile Data</h3>
+                        <pre>${JSON.stringify(conversation.profile, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            if (conversation.handoff && Object.keys(conversation.handoff).length > 0) {
+                html += `
+                    <div class="conversation-info">
+                        <h3>🤝 Handoff Data</h3>
+                        <pre>${JSON.stringify(conversation.handoff, null, 2)}</pre>
+                    </div>
+                `;
+            }
+            
+            // Add message history
+            if (conversation.message_history && conversation.message_history.length > 0) {
+                html += `
+                    <div class="conversation-info">
+                        <h3>💬 AI Memory History (${conversation.message_history.length} messages)</h3>
+                        <div class="message-history">
+                `;
+                
+                conversation.message_history.forEach((msg, index) => {
+                    const roleIcon = msg.role === 'user' ? '👤' : msg.role === 'assistant' ? '🤖' : '⚙️';
+                    const roleClass = msg.role === 'user' ? 'user-message' : msg.role === 'assistant' ? 'assistant-message' : 'system-message';
+                    
+                    html += `
+                        <div class="message-item ${roleClass}">
+                            <div class="message-header">
+                                <span class="message-role">${roleIcon} ${msg.role.toUpperCase()}</span>
+                                <span class="message-timestamp">${msg.timestamp}</span>
+                            </div>
+                            <div class="message-content">${msg.content}</div>
+                        </div>
+                    `;
+                });
+                
+                html += `
+                        </div>
+                    </div>
+                `;
+            } else {
+                html += `
+                    <div class="conversation-info">
+                        <h3>💬 AI Memory History</h3>
+                        <div class="no-data">No message history found</div>
+                    </div>
+                `;
+            }
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function displayConversationsList(conversations) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (conversations.length === 0) {
+                resultsDiv.innerHTML = '<div class="no-data">No active conversations found</div>';
+                return;
+            }
+            
+            let html = `
+                <div class="conversations-list">
+                    <h3>📋 All Active Conversations (${conversations.length})</h3>
+            `;
+            
+            conversations.forEach(conv => {
+                html += `
+                    <div class="conversation-item" onclick="selectConversation('${conv.phone_number}')">
+                        <div class="conversation-phone">${conv.phone_number}</div>
+                        <div class="conversation-thread">Thread: ${conv.thread_id}</div>
+                        <div class="conversation-status">${conv.has_response ? '✅ Has Response' : '⏳ No Response'}</div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        }
+        
+        function selectConversation(phoneNumber) {
+            // Highlight selected conversation
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.remove('selected');
+            });
+            event.target.closest('.conversation-item').classList.add('selected');
+            
+            // Set phone number in input and search
+            document.getElementById('phoneInput').value = phoneNumber;
+            searchConversation();
+        }
+        
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="error">❌ ${message}</div>`;
+        }
+        
+        // Diagnostics functions
         function runDiagnostics() {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = '<div class="loading">Running diagnostics...</div>';
@@ -218,35 +594,10 @@
                 return;
             }
             
-            // Show loading state
-            const button = event.target;
-            const originalText = button.textContent;
-            button.disabled = true;
-            button.textContent = 'Resetting...';
-            
             fetch('/api/method/ai_module.api.reset_sessions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Frappe-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
-                }
+                method: 'POST'
             })
-                .then(response => {
-                    if (!response.ok) {
-                        // Try to get error details from response
-                        return response.text().then(text => {
-                            let errorDetails = '';
-                            try {
-                                const errorData = JSON.parse(text);
-                                errorDetails = errorData.message || errorData.exc || text;
-                            } catch {
-                                errorDetails = text;
-                            }
-                            throw new Error(`HTTP ${response.status}: ${errorDetails}`);
-                        });
-                    }
-                    return response.json();
-                })
+                .then(response => response.json())
                 .then(data => {
                     if (data.message) {
                         alert('Sessions reset successfully: ' + data.message);
@@ -258,20 +609,20 @@
                 .catch(error => {
                     console.error('Reset sessions error:', error);
                     alert('Error resetting sessions: ' + error.message);
-                })
-                .finally(() => {
-                    // Restore button state
-                    button.disabled = false;
-                    button.textContent = originalText;
                 });
         }
         
-        // Auto-run diagnostics on page load (only if user is authenticated)
-        window.onload = () => {
-            {% if user and user != "Guest" %}
-            runDiagnostics();
-            {% endif %}
-        };
+        // Allow Enter key to search in memory tab
+        document.addEventListener('DOMContentLoaded', function() {
+            const phoneInput = document.getElementById('phoneInput');
+            if (phoneInput) {
+                phoneInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        searchConversation();
+                    }
+                });
+            }
+        });
     </script>
 {% endblock %}
 

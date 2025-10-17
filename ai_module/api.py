@@ -361,7 +361,8 @@ def run_diagnostics() -> Dict[str, Any]:
 			"threads": "ai_whatsapp_threads.json",
 			"language": "ai_whatsapp_lang.json", 
 			"profile": "ai_whatsapp_profile.json",
-			"handoff": "ai_whatsapp_handoff.json"
+			"handoff": "ai_whatsapp_handoff.json",
+			"messages": "ai_whatsapp_messages.json"
 		}
 		
 		total_sessions = 0
@@ -486,6 +487,129 @@ def run_diagnostics() -> Dict[str, Any]:
 	return results
 
 
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def get_conversation_memory(phone_number: str) -> Dict[str, Any]:
+	"""Get conversation memory for a specific phone number.
+	
+	Args:
+		phone_number: The phone number to get conversation history for
+	
+	Returns:
+		Dict with conversation data, thread info, and metadata
+	"""
+	try:
+		if frappe.session.user == "Guest":
+			frappe.throw("Authentication required", frappe.PermissionError)
+		
+		if not phone_number or not phone_number.strip():
+			frappe.response["http_status_code"] = 400
+			return {"success": False, "error": "Phone number is required"}
+		
+		phone_number = phone_number.strip()
+		
+		# Import here to avoid circular imports
+		from .agents.threads import _load_json_map, _lookup_phone_from_thread
+		
+		# Load thread mapping
+		thread_map = _load_json_map("ai_whatsapp_threads.json")
+		thread_id = thread_map.get(phone_number)
+		
+		if not thread_id:
+			frappe.response["http_status_code"] = 404
+			return {
+				"success": False, 
+				"error": f"No conversation found for phone number: {phone_number}",
+				"phone_number": phone_number
+			}
+		
+		# Load response mapping to get conversation history
+		response_map = _load_json_map("ai_whatsapp_responses.json")
+		
+		# Get conversation data
+		conversation_data = {
+			"phone_number": phone_number,
+			"thread_id": thread_id,
+			"last_response_id": response_map.get(thread_id),
+			"conversation_exists": True
+		}
+		
+		# Try to get additional metadata if available
+		try:
+			# Load language preference
+			lang_map = _load_json_map("ai_whatsapp_lang.json")
+			conversation_data["language"] = lang_map.get(phone_number, "Unknown")
+			
+			# Load profile data
+			profile_map = _load_json_map("ai_whatsapp_profile.json")
+			conversation_data["profile"] = profile_map.get(phone_number, {})
+			
+			# Load handoff data
+			handoff_map = _load_json_map("ai_whatsapp_handoff.json")
+			conversation_data["handoff"] = handoff_map.get(phone_number, {})
+			
+			# Load message history
+			messages_map = _load_json_map("ai_whatsapp_messages.json")
+			conversation_data["message_history"] = messages_map.get(phone_number, [])
+			
+		except Exception as meta_error:
+			frappe.logger("ai_module").warning(f"Could not load metadata for {phone_number}: {meta_error}")
+		
+		frappe.response["http_status_code"] = 200
+		return {
+			"success": True,
+			"conversation": conversation_data,
+			"message": f"Found conversation for {phone_number}"
+		}
+		
+	except Exception as e:
+		frappe.logger("ai_module").error(f"Failed to get conversation memory for {phone_number}: {str(e)}")
+		frappe.response["http_status_code"] = 500
+		return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist(allow_guest=False, methods=["GET"])
+def list_all_conversations() -> Dict[str, Any]:
+	"""List all active conversations with their phone numbers and thread IDs.
+	
+	Returns:
+		Dict with list of all active conversations
+	"""
+	try:
+		if frappe.session.user == "Guest":
+			frappe.throw("Authentication required", frappe.PermissionError)
+		
+		# Import here to avoid circular imports
+		from .agents.threads import _load_json_map
+		
+		# Load thread mapping
+		thread_map = _load_json_map("ai_whatsapp_threads.json")
+		response_map = _load_json_map("ai_whatsapp_responses.json")
+		
+		conversations = []
+		for phone_number, thread_id in thread_map.items():
+			conversation_info = {
+				"phone_number": phone_number,
+				"thread_id": thread_id,
+				"last_response_id": response_map.get(thread_id),
+				"has_response": bool(response_map.get(thread_id))
+			}
+			conversations.append(conversation_info)
+		
+		# Sort by phone number
+		conversations.sort(key=lambda x: x["phone_number"])
+		
+		frappe.response["http_status_code"] = 200
+		return {
+			"success": True,
+			"conversations": conversations,
+			"total_count": len(conversations),
+			"message": f"Found {len(conversations)} active conversations"
+		}
+		
+	except Exception as e:
+		frappe.logger("ai_module").error(f"Failed to list conversations: {str(e)}")
+		frappe.response["http_status_code"] = 500
+		return {"success": False, "error": str(e)}
 @frappe.whitelist(allow_guest=False, methods=["POST"])
 def reset_sessions() -> Dict[str, Any]:
 	"""Reset AI WhatsApp sessions (Cloud-friendly endpoint).
@@ -523,6 +647,7 @@ def reset_sessions() -> Dict[str, Any]:
 			"ai_whatsapp_lang.json",         # phone -> language mapping  
 			"ai_whatsapp_profile.json",     # phone -> profile mapping
 			"ai_whatsapp_handoff.json",     # phone -> last_human_activity mapping
+			"ai_whatsapp_messages.json",    # phone -> message history mapping
 		]
 		
 		files_reset = []

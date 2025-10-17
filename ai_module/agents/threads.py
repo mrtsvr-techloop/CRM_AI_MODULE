@@ -25,6 +25,7 @@ FUNCTION_CALL = "function_call"  # Actual type used by Responses API for tool ca
 # File paths
 THREAD_MAP_FILE = "ai_whatsapp_threads.json"
 RESPONSES_MAP_FILE = "ai_whatsapp_responses.json"
+MESSAGES_MAP_FILE = "ai_whatsapp_messages.json"
 
 
 def _log():
@@ -161,6 +162,63 @@ def _load_responses_map() -> Dict[str, str]:
 def _save_responses_map(mapping: Dict[str, str]) -> None:
 	"""Save session -> response_id mapping."""
 	_save_json_map(RESPONSES_MAP_FILE, mapping)
+
+
+def _load_messages_map() -> Dict[str, Any]:
+	"""Load messages map from file."""
+	return _load_json_map(MESSAGES_MAP_FILE)
+
+
+def _save_messages_map(mapping: Dict[str, Any]) -> None:
+	"""Save messages map to file."""
+	_save_json_map(MESSAGES_MAP_FILE, mapping)
+
+
+def _add_message_to_history(phone_number: str, role: str, content: str, timestamp: Optional[str] = None) -> None:
+	"""Add a message to conversation history.
+	
+	Args:
+		phone_number: Phone number for the conversation
+		role: Message role (user, assistant, system)
+		content: Message content
+		timestamp: Optional timestamp (defaults to current time)
+	"""
+	if not timestamp:
+		timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+	
+	messages_map = _load_messages_map()
+	
+	if phone_number not in messages_map:
+		messages_map[phone_number] = []
+	
+	message_entry = {
+		"role": role,
+		"content": content,
+		"timestamp": timestamp
+	}
+	
+	messages_map[phone_number].append(message_entry)
+	
+	# Keep only last 10 messages (increased from 5)
+	MAX_MESSAGES = 10
+	if len(messages_map[phone_number]) > MAX_MESSAGES:
+		messages_map[phone_number] = messages_map[phone_number][-MAX_MESSAGES:]
+	
+	_save_messages_map(messages_map)
+	_log().debug(f"Added {role} message to {phone_number} history (total: {len(messages_map[phone_number])})")
+
+
+def _get_conversation_history(phone_number: str) -> List[Dict[str, Any]]:
+	"""Get conversation history for a phone number.
+	
+	Args:
+		phone_number: Phone number to get history for
+	
+	Returns:
+		List of message dictionaries
+	"""
+	messages_map = _load_messages_map()
+	return messages_map.get(phone_number, [])
 
 
 def _extract_tool_name_and_args(tool_call: Any) -> Tuple[str, Dict[str, Any]]:
@@ -359,6 +417,12 @@ def run_with_responses_api(
 		f"AI request: message_len={len(message or '')} session={thread_id}"
 	)
 	
+	# Get phone number for message history (if available)
+	phone_number = _lookup_phone_from_thread(thread_id)
+	if phone_number:
+		# Save user message to history
+		_add_message_to_history(phone_number, "user", message)
+	
 	# Prepare inputs
 	instructions = (get_current_instructions() or "").strip()
 	inputs = _build_initial_inputs(instructions, message)
@@ -476,6 +540,10 @@ def run_with_responses_api(
 	
 	# Log response
 	_log().info(f"AI response: text_len={len(final_text or '')} session={thread_id}")
+	
+	# Save AI response to history (if phone number available)
+	if phone_number and final_text:
+		_add_message_to_history(phone_number, "assistant", final_text)
 	
 	return {
 		"final_output": final_text,

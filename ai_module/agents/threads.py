@@ -313,7 +313,7 @@ def _build_initial_inputs(instructions: str, message: str, phone_number: Optiona
 	if instructions:
 		inputs.append({
 			"role": "system",
-			"content": [{"type": "input_text", "text": instructions}]
+			"content": instructions
 		})
 	
 	# Add conversation history if phone number is available
@@ -332,14 +332,14 @@ def _build_initial_inputs(instructions: str, message: str, phone_number: Optiona
 			
 			inputs.append({
 				"role": role,
-				"content": [{"type": "input_text", "text": formatted_content}]
+				"content": formatted_content
 			})
 			_log().debug(f"Added to context: {role} - {content[:50]}...")
 	
 	# Add current user message
 	inputs.append({
 		"role": "user",
-		"content": [{"type": "input_text", "text": message}]
+		"content": message
 	})
 	
 	_log().info(f"Built inputs with {len(inputs)} messages total")
@@ -536,7 +536,7 @@ def run_with_responses_api(
 				combined_result = "\n".join(tool_results)
 				inputs.append({
 					"role": "user",
-					"content": [{"type": "input_text", "text": combined_result}]
+					"content": combined_result
 				})
 				_log().info(f"Added {len(tool_results)} tool results as user message, continuing to next iteration...")
 			

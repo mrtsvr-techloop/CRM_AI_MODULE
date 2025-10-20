@@ -8,7 +8,7 @@ SCHEMA: Dict[str, Any] = {
         "name": "generate_order_confirmation_form",
         "description": (
             "Generate a WhatsApp order confirmation form link with pre-filled data. "
-            "This creates a secure form that customers can fill to confirm their order. "
+            "This creates a secure Temp Ordine record that customers can access to confirm their order. "
             "The form is pre-populated with the order details extracted from the conversation."
         ),
         "parameters": {
@@ -22,19 +22,24 @@ SCHEMA: Dict[str, Any] = {
                     "type": "string", 
                     "description": "Customer's phone number (same as WhatsApp number)"
                 },
-                "product_name": {
-                    "type": "string",
-                    "description": "Name of the product/service ordered"
-                },
-                "quantity": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "description": "Quantity of the product"
-                },
-                "unit_price": {
-                    "type": "number",
-                    "minimum": 0,
-                    "description": "Price per unit in euros"
+                "products": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "product_id": {
+                                "type": "string",
+                                "description": "CRM Product ID"
+                            },
+                            "product_quantity": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "description": "Quantity of this product"
+                            }
+                        },
+                        "required": ["product_id", "product_quantity"]
+                    },
+                    "description": "Array of products with their IDs and quantities"
                 },
                 "delivery_address": {
                     "type": "string",
@@ -45,7 +50,7 @@ SCHEMA: Dict[str, Any] = {
                     "description": "Additional notes or special instructions"
                 }
             },
-            "required": ["customer_name", "phone_number", "product_name", "quantity"]
+            "required": ["customer_name", "phone_number", "products"]
         },
     },
 }
@@ -53,34 +58,31 @@ SCHEMA: Dict[str, Any] = {
 def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     """Generate a WhatsApp order confirmation form link with pre-filled data.
     
-    This function creates a secure form URL that customers can use to confirm their order.
+    This function creates a secure Temp Ordine record that customers can use to confirm their order.
     The form is pre-populated with the order details extracted from the conversation.
     
     Args:
         customer_name: Customer's full name
         phone_number: Customer's phone number (same as WhatsApp number)
-        product_name: Name of the product/service ordered
-        quantity: Quantity of the product
-        unit_price: Price per unit in euros (optional)
+        products: Array of products with product_id and product_quantity
         delivery_address: Customer's delivery address (optional)
         notes: Additional notes or special instructions (optional)
     
     Returns:
         {
             "success": bool,
-            "form_url": str,  # Pre-filled form URL
+            "form_url": str,  # Short URL to Temp Ordine
             "message": str,
             "order_summary": {
                 "customer_name": str,
-                "product_name": str,
-                "quantity": int,
-                "total_price": float
+                "products_count": int,
+                "temp_order_id": str
             }
         }
     """
     try:
         # Validate required parameters
-        required_params = ["customer_name", "phone_number", "product_name", "quantity"]
+        required_params = ["customer_name", "phone_number", "products"]
         for param in required_params:
             if not kwargs.get(param):
                 return {
@@ -88,55 +90,78 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                     "error": f"Missing required parameter: {param}"
                 }
         
-        # Calculate total price
-        quantity = int(kwargs.get("quantity", 1))
-        unit_price = float(kwargs.get("unit_price", 0))
-        total_price = quantity * unit_price
+        # Validate products array
+        products = kwargs.get("products", [])
+        if not isinstance(products, list) or len(products) == 0:
+            return {
+                "success": False,
+                "error": "Products array is required and must not be empty"
+            }
         
-        # Build form URL with pre-filled parameters (CRM endpoint)
-        # Prefer absolute URL using Frappe site base when available
+        # Validate each product has required fields
+        for i, product in enumerate(products):
+            if not product.get("product_id") or not product.get("product_quantity"):
+                return {
+                    "success": False,
+                    "error": f"Product {i+1} missing product_id or product_quantity"
+                }
+        
+        # Create Temp Ordine record
         try:
-            import frappe  # type: ignore
-            from frappe.utils import get_url  # type: ignore
-            base_url = get_url("/crm/order_confirmation")  # absolute URL
-        except Exception:
-            # Fallback: relative path if frappe context not available
-            base_url = "/crm/order_confirmation"
-
-        params = {
-            "customer_name": kwargs.get("customer_name"),
-            "phone_number": kwargs.get("phone_number"),
-            "product_name": kwargs.get("product_name"),
-            "quantity": str(quantity),
-            "unit_price": str(unit_price),
-            "total_price": str(total_price),
-            "delivery_address": kwargs.get("delivery_address", ""),
-            "notes": kwargs.get("notes", "")
-        }
-        
-        # Create URL-encoded query string
-        try:
-            from urllib.parse import urlencode, quote_plus
-            query_string = urlencode({k: v for k, v in params.items() if v}, quote_via=quote_plus)
-        except Exception:
-            # Very defensive fallback (no spaces encoded properly)
-            query_string = "&".join([f"{k}={str(v)}" for k, v in params.items() if v])
-        form_url = f"{base_url}?{query_string}"
-        
-        # Create order summary
-        order_summary = {
-            "customer_name": kwargs.get("customer_name"),
-            "product_name": kwargs.get("product_name"),
-            "quantity": quantity,
-            "total_price": total_price
-        }
-        
-        return {
-            "success": True,
-            "form_url": form_url,
-            "message": f"Form di conferma ordine generato per {kwargs.get('customer_name')}",
-            "order_summary": order_summary
-        }
+            import frappe
+            import time
+            import json
+            
+            # Prepare order data
+            current_time = int(time.time())
+            expires_at = current_time + 300  # 5 minutes
+            
+            order_data = {
+                "customer_name": kwargs.get("customer_name"),
+                "phone_number": kwargs.get("phone_number"),
+                "products": products,
+                "delivery_address": kwargs.get("delivery_address", ""),
+                "notes": kwargs.get("notes", "")
+            }
+            
+            # Create Temp Ordine record
+            temp_order_doc = frappe.get_doc({
+                "doctype": "Temp Ordine",
+                "order_data": json.dumps(order_data),
+                "created_at": current_time,
+                "expires_at": expires_at,
+                "status": "Active"
+            })
+            
+            temp_order_doc.insert(ignore_permissions=True)
+            temp_order_id = temp_order_doc.name
+            
+            # Build form URL using Temp Ordine ID
+            try:
+                from frappe.utils import get_url
+                form_url = get_url(f"/order_confirmation/{temp_order_id}")
+            except Exception:
+                form_url = f"/order_confirmation/{temp_order_id}"
+            
+            # Create order summary
+            order_summary = {
+                "customer_name": kwargs.get("customer_name"),
+                "products_count": len(products),
+                "temp_order_id": temp_order_id
+            }
+            
+            return {
+                "success": True,
+                "form_url": form_url,
+                "message": f"Form di conferma ordine generato per {kwargs.get('customer_name')}",
+                "order_summary": order_summary
+            }
+            
+        except Exception as frappe_error:
+            return {
+                "success": False,
+                "error": f"Error creating Temp Ordine: {str(frappe_error)}"
+            }
         
     except Exception as e:
         return {

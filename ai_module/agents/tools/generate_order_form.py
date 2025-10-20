@@ -94,7 +94,15 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         total_price = quantity * unit_price
         
         # Build form URL with pre-filled parameters (CRM endpoint)
-        base_url = "/crm/order_confirmation"
+        # Prefer absolute URL using Frappe site base when available
+        try:
+            import frappe  # type: ignore
+            from frappe.utils import get_url  # type: ignore
+            base_url = get_url("/crm/order_confirmation")  # absolute URL
+        except Exception:
+            # Fallback: relative path if frappe context not available
+            base_url = "/crm/order_confirmation"
+
         params = {
             "customer_name": kwargs.get("customer_name"),
             "phone_number": kwargs.get("phone_number"),
@@ -106,8 +114,13 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             "notes": kwargs.get("notes", "")
         }
         
-        # Create query string
-        query_string = "&".join([f"{k}={v}" for k, v in params.items() if v])
+        # Create URL-encoded query string
+        try:
+            from urllib.parse import urlencode, quote_plus
+            query_string = urlencode({k: v for k, v in params.items() if v}, quote_via=quote_plus)
+        except Exception:
+            # Very defensive fallback (no spaces encoded properly)
+            query_string = "&".join([f"{k}={str(v)}" for k, v in params.items() if v])
         form_url = f"{base_url}?{query_string}"
         
         # Create order summary

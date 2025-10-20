@@ -306,8 +306,8 @@ def _execute_function_tool(tool_call: Any, thread_id: str) -> str:
 	return json.dumps(result, default=str) if not isinstance(result, str) else result
 
 
-def _build_initial_inputs(instructions: str, message: str) -> List[Dict[str, Any]]:
-	"""Build the initial input messages for the AI."""
+def _build_initial_inputs(instructions: str, message: str, phone_number: Optional[str] = None) -> List[Dict[str, Any]]:
+	"""Build the initial input messages for the AI, including conversation history."""
 	inputs: List[Dict[str, Any]] = []
 	
 	if instructions:
@@ -316,11 +316,33 @@ def _build_initial_inputs(instructions: str, message: str) -> List[Dict[str, Any
 			"content": [{"type": "input_text", "text": instructions}]
 		})
 	
+	# Add conversation history if phone number is available
+	if phone_number:
+		conversation_history = _get_conversation_history(phone_number)
+		_log().debug(f"Loading conversation history for {phone_number}: {len(conversation_history)} messages")
+		
+		# Add previous messages to context (excluding the current message)
+		for msg in conversation_history[:-1]:  # Exclude last message (current one)
+			role = msg.get("role", "user")
+			content = msg.get("content", "")
+			timestamp = msg.get("timestamp", "")
+			
+			# Format message with timestamp for context
+			formatted_content = f"[{timestamp}] {content}" if timestamp else content
+			
+			inputs.append({
+				"role": role,
+				"content": [{"type": "input_text", "text": formatted_content}]
+			})
+			_log().debug(f"Added to context: {role} - {content[:50]}...")
+	
+	# Add current user message
 	inputs.append({
 		"role": "user",
 		"content": [{"type": "input_text", "text": message}]
 	})
 	
+	_log().info(f"Built inputs with {len(inputs)} messages total")
 	return inputs
 
 
@@ -425,7 +447,7 @@ def run_with_responses_api(
 	
 	# Prepare inputs
 	instructions = (get_current_instructions() or "").strip()
-	inputs = _build_initial_inputs(instructions, message)
+	inputs = _build_initial_inputs(instructions, message, phone_number)
 	
 	# Get tools and model config
 	tools = _coerce_tools_for_responses(get_assistant_tools())

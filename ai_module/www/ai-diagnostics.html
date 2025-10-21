@@ -807,7 +807,7 @@
         }
         
         function deleteAllAIFiles() {
-            if (!confirm('⚠️ DANGER: This will DELETE ALL AI files from private/files!\n\nThis includes:\n- ai_whatsapp_sessions.json\n- ai_whatsapp_threads.json\n- ai_whatsapp_lang.json\n- ai_response_map.json\n- ai_whatsapp_messages.json\n\nAre you absolutely sure?')) {
+            if (!confirm('⚠️ DANGER: This will DELETE ALL AI files from private/files!\n\nThis includes:\n- ai_whatsapp_sessions.json\n- ai_whatsapp_threads.json\n- ai_whatsapp_lang.json\n- ai_response_map.json\n- ai_whatsapp_messages.json\n- ai_whatsapp_responses.json\n\nAre you absolutely sure?')) {
                 return;
             }
             
@@ -819,7 +819,7 @@
             })
                 .then(response => response.json())
                 .then(data => {
-                    if (data.message) {
+                    if (data.message && data.message.deleted_files) {
                         alert('✅ AI files deleted successfully!\n\nDeleted files: ' + data.message.deleted_files.join(', '));
                         runDiagnostics();
                     } else {

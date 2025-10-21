@@ -567,7 +567,8 @@ def delete_all_ai_files():
 			"ai_whatsapp_threads.json", 
 			"ai_whatsapp_lang.json",
 			"ai_response_map.json",
-			"ai_whatsapp_messages.json"
+			"ai_whatsapp_messages.json",
+			"ai_whatsapp_responses.json"
 		]
 		
 		deleted_files = []

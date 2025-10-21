@@ -230,7 +230,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			log_debug("WhatsApp Message created successfully", {
 				"doc_name": whatsapp_doc.name,
 				"type": whatsapp_doc.type,
-				"from_field": whatsapp_doc.from,
+				"from_field": getattr(whatsapp_doc, 'from', None),
 				"message": whatsapp_doc.message,
 				"creation": str(whatsapp_doc.creation),
 				"available_fields": available_fields
@@ -315,7 +315,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				"whatsapp_doc": {
 					"name": whatsapp_doc.name,
 					"type": whatsapp_doc.type,
-					"from_field": whatsapp_doc.from,
+					"from_field": getattr(whatsapp_doc, 'from', None),
 					"message": whatsapp_doc.message,
 					"creation": str(whatsapp_doc.creation),
 					"status": whatsapp_doc.status

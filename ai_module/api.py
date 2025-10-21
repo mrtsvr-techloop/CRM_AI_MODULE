@@ -560,15 +560,36 @@ def run_diagnostics() -> Dict[str, Any]:
 		if not doctype_exists:
 			return {"status": "fail", "message": "WhatsApp Message doctype not found"}
 		
-		# Query messages
+		# Get doctype fields dynamically
+		try:
+			doctype_doc = frappe.get_doc("DocType", "WhatsApp Message")
+			available_fields = [field.fieldname for field in doctype_doc.fields]
+			log_debug("WhatsApp Message fields", {"fields": available_fields})
+		except Exception as e:
+			log_debug("FAILED to get doctype fields", {"error": str(e)})
+			available_fields = ["name", "creation"]  # fallback
+		
+		# Build fields list dynamically based on what's available
+		requested_fields = ["name", "type", "creation", "from_number", "to_number", "message_text"]
+		fields_to_query = []
+		
+		for field in requested_fields:
+			if field in available_fields:
+				fields_to_query.append(field)
+			else:
+				log_debug(f"Field {field} not available in doctype")
+		
+		log_debug("Fields to query", {"fields": fields_to_query})
+		
+		# Query messages with available fields only
 		try:
 			yesterday = frappe.utils.add_to_date(frappe.utils.now(), days=-1)
-			log_debug("Querying messages", {"since": str(yesterday)})
+			log_debug("Querying messages", {"since": str(yesterday), "fields": fields_to_query})
 			
 			messages = frappe.get_all(
 				"WhatsApp Message",
 				filters={"creation": [">", yesterday]},
-				fields=["name", "type", "creation", "from_number", "to_number", "message_text"],
+				fields=fields_to_query,
 				order_by="creation desc",
 				limit=20
 			)
@@ -578,8 +599,20 @@ def run_diagnostics() -> Dict[str, Any]:
 			log_debug("FAILED to query messages", {"error": str(e), "traceback": traceback.format_exc()})
 			return {"status": "error", "message": f"Failed to query messages: {str(e)}"}
 		
-		incoming = [m for m in messages if m.type == "Incoming"]
-		outgoing = [m for m in messages if m.type == "Outgoing"]
+		# Analyze messages based on available fields
+		incoming = []
+		outgoing = []
+		
+		for message in messages:
+			# Check if 'type' field exists and use it
+			if 'type' in message:
+				if message.type == "Incoming":
+					incoming.append(message)
+				elif message.type == "Outgoing":
+					outgoing.append(message)
+			else:
+				# If no type field, we can't distinguish
+				log_debug("No 'type' field available, cannot distinguish incoming/outgoing")
 		
 		log_debug("Message analysis", {"incoming": len(incoming), "outgoing": len(outgoing)})
 		
@@ -587,9 +620,12 @@ def run_diagnostics() -> Dict[str, Any]:
 		if incoming and not outgoing:
 			status = "fail"
 			message = "Messages received but NO responses sent"
-		elif not incoming:
+		elif not incoming and not outgoing:
 			status = "warning"
 			message = "No recent messages"
+		elif not incoming:
+			status = "warning"
+			message = "No recent incoming messages"
 		else:
 			message = f"{len(incoming)} in, {len(outgoing)} out"
 		
@@ -598,7 +634,9 @@ def run_diagnostics() -> Dict[str, Any]:
 			"incoming": len(incoming),
 			"outgoing": len(outgoing),
 			"message": message,
-			"raw_messages": messages
+			"raw_messages": messages,
+			"available_fields": available_fields,
+			"queried_fields": fields_to_query
 		}
 	
 	def test_recent_errors():

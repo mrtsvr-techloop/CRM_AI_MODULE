@@ -497,10 +497,12 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 		try:
 			# Create a WhatsApp message that simulates a real incoming message
 			import time
+			# Normalize phone number to match the hook behavior
+			normalized_phone = phone_number.lstrip('+') if phone_number else phone_number
 			whatsapp_doc = frappe.get_doc({
 				"doctype": "WhatsApp Message",
 				"type": "Incoming",
-				"from": phone_number,
+				"from": normalized_phone,  # Use normalized phone number
 				"message": "ciao - messaggio reale da WhatsApp",
 				"content_type": "text",
 				"status": "Sent",

@@ -496,6 +496,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 		
 		try:
 			# Create a WhatsApp message that simulates a real incoming message
+			import time
 			whatsapp_doc = frappe.get_doc({
 				"doctype": "WhatsApp Message",
 				"type": "Incoming",
@@ -519,7 +520,6 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			})
 			
 			# Wait a moment for processing
-			import time
 			time.sleep(3)
 			
 			# Check if AI responded
@@ -610,7 +610,103 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
-	# Test 12: WhatsApp Real Flow Simulation
+	# Test 12: Check Existing WhatsApp Messages
+	def test_existing_whatsapp_messages():
+		"""Check if existing WhatsApp messages trigger the AI hook."""
+		log_debug("Checking existing WhatsApp messages...")
+		
+		try:
+			# Get recent incoming messages
+			recent_messages = frappe.get_all(
+				"WhatsApp Message",
+				filters={
+					"type": "Incoming",
+					"creation": [">=", "2025-10-21 15:00:00"]  # Last hour
+				},
+				fields=["name", "from", "message", "creation", "status"],
+				order_by="creation desc",
+				limit=10
+			)
+			
+			log_debug("Recent incoming messages", {
+				"count": len(recent_messages),
+				"messages": recent_messages
+			})
+			
+			# Check if any of these messages have outgoing responses
+			messages_with_responses = []
+			messages_without_responses = []
+			
+			for msg in recent_messages:
+				# Check for outgoing messages after this incoming message
+				outgoing_messages = frappe.get_all(
+					"WhatsApp Message",
+					filters={
+						"type": "Outgoing",
+						"to": getattr(msg, 'from', None),
+						"creation": [">=", msg.creation]
+					},
+					fields=["name", "message", "creation"],
+					limit=1
+				)
+				
+				if outgoing_messages:
+					messages_with_responses.append({
+						"incoming": msg,
+						"outgoing": outgoing_messages[0]
+					})
+				else:
+					messages_without_responses.append(msg)
+			
+			log_debug("Message analysis", {
+				"with_responses": len(messages_with_responses),
+				"without_responses": len(messages_without_responses),
+				"messages_with_responses": messages_with_responses,
+				"messages_without_responses": messages_without_responses
+			})
+			
+			# Determine result
+			if messages_with_responses:
+				return {
+					"status": "pass",
+					"message": f"Found {len(messages_with_responses)} messages with AI responses",
+					"analysis": {
+						"total_messages": len(recent_messages),
+						"with_responses": len(messages_with_responses),
+						"without_responses": len(messages_without_responses),
+						"response_rate": f"{len(messages_with_responses)/len(recent_messages)*100:.1f}%" if recent_messages else "0%"
+					},
+					"messages_with_responses": messages_with_responses,
+					"messages_without_responses": messages_without_responses
+				}
+			else:
+				return {
+					"status": "warning",
+					"message": f"Found {len(recent_messages)} messages but none have AI responses",
+					"analysis": {
+						"total_messages": len(recent_messages),
+						"with_responses": len(messages_with_responses),
+						"without_responses": len(messages_without_responses),
+						"response_rate": "0%"
+					},
+					"messages_with_responses": messages_with_responses,
+					"messages_without_responses": messages_without_responses,
+					"debug_info": "AI hook may not be triggered for real WhatsApp messages"
+				}
+			
+		except Exception as e:
+			log_debug("FAILED existing WhatsApp messages test", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Existing WhatsApp messages test failed: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
+	# Test 13: WhatsApp Real Flow Simulation
 	def test_whatsapp_real_flow():
 		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
 		log_debug("Testing WhatsApp REAL FLOW simulation...")
@@ -768,6 +864,9 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	
 	# Test real WhatsApp message after all fixes
 	results["tests"]["real_whatsapp_message"] = safe_test("Real WhatsApp Message", test_real_whatsapp_message)
+	
+	# Check existing WhatsApp messages
+	results["tests"]["existing_whatsapp_messages"] = safe_test("Existing WhatsApp Messages", test_existing_whatsapp_messages)
 	
 	# Verify settings are still correct after the test
 	results["tests"]["verify_settings"] = safe_test("Verify Settings After Test", test_whatsapp_settings)

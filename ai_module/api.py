@@ -890,6 +890,56 @@ def run_diagnostics() -> Dict[str, Any]:
 			"openai_client": "Created successfully"
 		}
 	
+	def test_ai_agent_execution():
+		"""Test AI agent execution - CAPTURE EVERYTHING."""
+		log_debug("Testing AI agent execution...")
+		
+		# Test 1: Check if agent is registered
+		try:
+			from .agents.registry import _AGENT_REGISTRY
+			agent_name = get_environment().get("AI_AGENT_NAME") or "CRM Assistant"
+			log_debug("Checking agent registration", {"agent_name": agent_name, "registered_agents": list(_AGENT_REGISTRY.keys())})
+			
+			if agent_name not in _AGENT_REGISTRY:
+				return {"status": "fail", "message": f"Agent '{agent_name}' not registered. Available: {list(_AGENT_REGISTRY.keys())}"}
+			
+			log_debug("Agent found in registry", {"agent": agent_name})
+		except Exception as e:
+			log_debug("FAILED to check agent registry", {"error": str(e), "traceback": traceback.format_exc()})
+			return {"status": "error", "message": f"Failed to check agent registry: {str(e)}"}
+		
+		# Test 2: Try to run the agent
+		try:
+			from .agents.runner import run_agent
+			log_debug("Attempting to run agent...")
+			
+			test_result = run_agent(
+				agent_or_name=agent_name,
+				input_text="Test message from diagnostics",
+				session_id="test_session_diagnostics"
+			)
+			
+			log_debug("Agent execution completed", {"result": test_result})
+			
+			return {
+				"status": "pass",
+				"message": "Agent execution successful",
+				"agent_name": agent_name,
+				"result": test_result
+			}
+			
+		except Exception as e:
+			log_debug("FAILED to run agent", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Failed to run agent: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+	
 	# Run all tests using the modular functions
 	log_debug("Starting diagnostics run...")
 	
@@ -902,6 +952,7 @@ def run_diagnostics() -> Dict[str, Any]:
 	results["tests"]["ai_initialization"] = safe_test("AI Initialization", test_ai_initialization)
 	results["tests"]["ai_session_creation"] = safe_test("AI Session Creation", test_ai_session_creation)
 	results["tests"]["ai_environment"] = safe_test("AI Environment", test_ai_environment)
+	results["tests"]["ai_agent_execution"] = safe_test("AI Agent Execution", test_ai_agent_execution)
 	
 	log_debug("All tests completed")
 	

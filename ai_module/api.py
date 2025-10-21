@@ -890,49 +890,82 @@ def run_diagnostics() -> Dict[str, Any]:
 			"openai_client": "Created successfully"
 		}
 	
-	def test_ai_agent_execution():
-		"""Test AI agent execution - CAPTURE EVERYTHING."""
-		log_debug("Testing AI agent execution...")
+	def test_whatsapp_message_processing():
+		"""Test WhatsApp message processing - CAPTURE EVERYTHING."""
+		log_debug("Testing WhatsApp message processing...")
 		
-		# Test 1: Check if agent is registered
+		# Simulate a real WhatsApp message payload
+		test_payload = {
+			"from": "+393926012793",
+			"message": "ciao",
+			"content_type": "text",
+			"timestamp": frappe.utils.now()
+		}
+		
+		log_debug("Test payload created", {"payload": test_payload})
+		
 		try:
-			from .agents.registry import _AGENT_REGISTRY
-			agent_name = get_environment().get("AI_AGENT_NAME") or "CRM Assistant"
-			log_debug("Checking agent registration", {"agent_name": agent_name, "registered_agents": list(_AGENT_REGISTRY.keys())})
-			
-			if agent_name not in _AGENT_REGISTRY:
-				return {"status": "fail", "message": f"Agent '{agent_name}' not registered. Available: {list(_AGENT_REGISTRY.keys())}"}
-			
-			log_debug("Agent found in registry", {"agent": agent_name})
+			# Import the WhatsApp processing function
+			from .integrations.whatsapp import process_incoming_whatsapp_message
+			log_debug("WhatsApp processing function imported successfully")
 		except Exception as e:
-			log_debug("FAILED to check agent registry", {"error": str(e), "traceback": traceback.format_exc()})
-			return {"status": "error", "message": f"Failed to check agent registry: {str(e)}"}
+			log_debug("FAILED to import WhatsApp processing function", {"error": str(e), "traceback": traceback.format_exc()})
+			return {"status": "error", "message": f"Failed to import WhatsApp processing: {str(e)}"}
 		
-		# Test 2: Try to run the agent
+		# Test the processing function
 		try:
-			from .agents.runner import run_agent
-			log_debug("Attempting to run agent...")
+			log_debug("Attempting to process WhatsApp message...")
 			
-			test_result = run_agent(
-				agent_or_name=agent_name,
-				input_text="Test message from diagnostics",
-				session_id="test_session_diagnostics"
-			)
+			# This should simulate exactly what happens when you send "ciao"
+			process_incoming_whatsapp_message(test_payload)
 			
-			log_debug("Agent execution completed", {"result": test_result})
+			log_debug("WhatsApp message processing completed successfully")
 			
 			return {
 				"status": "pass",
-				"message": "Agent execution successful",
-				"agent_name": agent_name,
-				"result": test_result
+				"message": "WhatsApp message processing successful",
+				"payload": test_payload
 			}
 			
 		except Exception as e:
-			log_debug("FAILED to run agent", {"error": str(e), "traceback": traceback.format_exc()})
+			log_debug("FAILED to process WhatsApp message", {"error": str(e), "traceback": traceback.format_exc()})
 			return {
 				"status": "error",
-				"message": f"Failed to run agent: {str(e)}",
+				"message": f"Failed to process WhatsApp message: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+	
+	def test_whatsapp_autoreply_settings():
+		"""Test WhatsApp autoreply settings - CAPTURE EVERYTHING."""
+		log_debug("Testing WhatsApp autoreply settings...")
+		
+		try:
+			from .integrations.whatsapp import _should_autoreply, _send_autoreply
+			log_debug("WhatsApp autoreply functions imported successfully")
+		except Exception as e:
+			log_debug("FAILED to import autoreply functions", {"error": str(e), "traceback": traceback.format_exc()})
+			return {"status": "error", "message": f"Failed to import autoreply functions: {str(e)}"}
+		
+		# Test autoreply settings
+		try:
+			should_reply = _should_autoreply()
+			log_debug("Autoreply check completed", {"should_reply": should_reply})
+			
+			return {
+				"status": "pass",
+				"message": f"Autoreply check completed: {should_reply}",
+				"should_autoreply": should_reply
+			}
+			
+		except Exception as e:
+			log_debug("FAILED to check autoreply settings", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Failed to check autoreply settings: {str(e)}",
 				"error_details": {
 					"error": str(e),
 					"type": type(e).__name__,
@@ -952,7 +985,8 @@ def run_diagnostics() -> Dict[str, Any]:
 	results["tests"]["ai_initialization"] = safe_test("AI Initialization", test_ai_initialization)
 	results["tests"]["ai_session_creation"] = safe_test("AI Session Creation", test_ai_session_creation)
 	results["tests"]["ai_environment"] = safe_test("AI Environment", test_ai_environment)
-	results["tests"]["ai_agent_execution"] = safe_test("AI Agent Execution", test_ai_agent_execution)
+	results["tests"]["whatsapp_message_processing"] = safe_test("WhatsApp Message Processing", test_whatsapp_message_processing)
+	results["tests"]["whatsapp_autoreply_settings"] = safe_test("WhatsApp Autoreply Settings", test_whatsapp_autoreply_settings)
 	
 	log_debug("All tests completed")
 	

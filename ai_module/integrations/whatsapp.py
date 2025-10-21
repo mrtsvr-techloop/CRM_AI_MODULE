@@ -344,6 +344,9 @@ def on_whatsapp_after_insert(doc, method=None):
 	Processes incoming messages and forwards them to AI assistant.
 	"""
 	try:
+		# DEBUG: Log that the function was called
+		frappe.logger("ai_module.debug").info(f"AI HOOK TRIGGERED: on_whatsapp_after_insert called for doc={doc.name}, type={doc.get('type')}")
+		
 		apply_environment()
 		
 		# Handle outgoing messages
@@ -383,7 +386,10 @@ def on_whatsapp_after_insert(doc, method=None):
 		else:
 			_enqueue_or_process(payload, doc.name)
 			
-	except Exception:
+	except Exception as e:
+		# DEBUG: Log the actual error
+		frappe.logger("ai_module.debug").error(f"AI HOOK ERROR: {str(e)}")
+		frappe.logger("ai_module.debug").error(f"AI HOOK TRACEBACK: {frappe.get_traceback()}")
 		frappe.log_error(
 			message=frappe.get_traceback(),
 			title="ai_module.integrations.whatsapp.on_whatsapp_after_insert",

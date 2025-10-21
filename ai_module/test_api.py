@@ -228,20 +228,21 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			)
 			
 			log_debug("AI execution result", {
-				"success": "response" in result,
-				"response_length": len(result.get("response", "")),
-				"response_preview": result.get("response", "")[:100] if result.get("response") else None,
+				"success": "response" in result or "final_output" in result,
+				"response_length": len(result.get("response", result.get("final_output", ""))),
+				"response_preview": (result.get("response", result.get("final_output", "")))[:100] if result.get("response") or result.get("final_output") else None,
 				"metadata": result
 			})
 			
-			# Check if we got a response
-			has_response = bool(result.get("response", "").strip())
-			
+			# Check if we got a response (either "response" or "final_output")
+			has_response = bool((result.get("response", "") or result.get("final_output", "")).strip())
+				
 			if has_response:
+				response_text = result.get("response", result.get("final_output", ""))
 				return {
 					"status": "pass",
-					"message": f"AI responded successfully! Response: {result.get('response', '')[:100]}...",
-					"response": result.get("response", ""),
+					"message": f"AI responded successfully! Response: {response_text[:100]}...",
+					"response": response_text,
 					"metadata": result
 				}
 			else:

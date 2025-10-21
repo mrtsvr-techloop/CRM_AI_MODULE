@@ -11,6 +11,7 @@ All initialization is idempotent and can be called multiple times safely.
 from __future__ import annotations
 
 import frappe
+import os
 
 from .config import apply_environment
 from .logger_utils import get_resilient_logger
@@ -19,6 +20,20 @@ from .logger_utils import get_resilient_logger
 def _log():
 	"""Get Frappe logger for bootstrap module."""
 	return get_resilient_logger("ai_module.bootstrap")
+
+
+def _ensure_whatsapp_directories() -> None:
+	"""Ensure WhatsApp data directories exist with proper permissions."""
+	try:
+		# Get the private files directory path
+		private_files_path = frappe.utils.get_site_path("private", "files")
+		
+		# Create directory with proper permissions
+		os.makedirs(private_files_path, mode=0o755, exist_ok=True)
+		
+		_log().info(f"WhatsApp data directory ensured: {private_files_path}")
+	except Exception as exc:
+		_log().warning(f"Failed to ensure WhatsApp directories: {exc}")
 
 
 def _register_tools() -> None:
@@ -43,6 +58,7 @@ def initialize() -> None:
 	Performs:
 	1. Apply OpenAI environment variables (API key, org, project, etc.)
 	2. Register tool implementations for function calling
+	3. Ensure WhatsApp data directories exist
 	
 	This is idempotent and safe to call multiple times. Designed to be
 	lightweight so it can be called per-request or per-job without overhead.
@@ -54,6 +70,9 @@ def initialize() -> None:
 	"""
 	# Apply OpenAI environment configuration
 	apply_environment()
+	
+	# Ensure WhatsApp directories exist
+	_ensure_whatsapp_directories()
 	
 	# Register tool implementations
 	_register_tools()

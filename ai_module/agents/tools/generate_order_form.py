@@ -16,11 +16,7 @@ SCHEMA: Dict[str, Any] = {
             "properties": {
                 "customer_name": {
                     "type": "string",
-                    "description": "Customer's full name"
-                },
-                "phone_number": {
-                    "type": "string", 
-                    "description": "Customer's phone number (same as WhatsApp number)"
+                    "description": "Customer's full name (extracted from conversation)"
                 },
                 "products": {
                     "type": "array",
@@ -50,7 +46,7 @@ SCHEMA: Dict[str, Any] = {
                     "description": "Additional notes or special instructions"
                 }
             },
-            "required": ["customer_name", "phone_number", "products"]
+            "required": ["products"]
         },
     },
 }
@@ -62,8 +58,8 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     The form is pre-populated with the order details extracted from the conversation.
     
     Args:
-        customer_name: Customer's full name
-        phone_number: Customer's phone number (same as WhatsApp number)
+        customer_name: Customer's full name (extracted from conversation, optional)
+        phone_from: Customer's phone number (automatically injected by security system)
         products: Array of products with product_id and product_quantity
         delivery_address: Customer's delivery address (optional)
         notes: Additional notes or special instructions (optional)
@@ -81,8 +77,22 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         }
     """
     try:
+        # Get phone_from (automatically injected by security system)
+        phone_from = kwargs.get("phone_from")
+        if not phone_from:
+            return {
+                "success": False,
+                "error": "Phone number not available from conversation context"
+            }
+        
+        # Use phone_from as the phone_number
+        phone_number = phone_from
+        
+        # Get customer_name from kwargs (should be extracted by AI from conversation)
+        customer_name = kwargs.get("customer_name", "")
+        
         # Validate required parameters
-        required_params = ["customer_name", "phone_number", "products"]
+        required_params = ["products"]
         for param in required_params:
             if not kwargs.get(param):
                 return {
@@ -117,8 +127,8 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             expires_at = current_time + 300  # 5 minutes
             
             order_data = {
-                "customer_name": kwargs.get("customer_name"),
-                "phone_number": kwargs.get("phone_number"),
+                "customer_name": customer_name,
+                "phone_number": phone_number,
                 "products": products,
                 "delivery_address": kwargs.get("delivery_address", ""),
                 "notes": kwargs.get("notes", "")
@@ -134,18 +144,19 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             })
             
             temp_order_doc.insert(ignore_permissions=True)
+            frappe.db.commit()  # Force commit to ensure data is saved
             temp_order_id = temp_order_doc.name
             
-            # Build form URL using FCRM TEMP ORDINE ID
+            # Build form URL using FCRM TEMP ORDINE ID as query parameter
             try:
                 from frappe.utils import get_url
-                form_url = get_url(f"/order_confirmation/{temp_order_id}")
+                form_url = get_url(f"/order_confirmation?order_id={temp_order_id}")
             except Exception:
-                form_url = f"/order_confirmation/{temp_order_id}"
+                form_url = f"/order_confirmation?order_id={temp_order_id}"
             
             # Create order summary
             order_summary = {
-                "customer_name": kwargs.get("customer_name"),
+                "customer_name": customer_name,
                 "products_count": len(products),
                 "temp_order_id": temp_order_id
             }
@@ -153,7 +164,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             return {
                 "success": True,
                 "form_url": form_url,
-                "message": f"Form di conferma ordine generato per {kwargs.get('customer_name')}",
+                "message": f"Form di conferma ordine generato per {customer_name}",
                 "order_summary": order_summary
             }
             

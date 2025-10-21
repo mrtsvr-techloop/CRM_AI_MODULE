@@ -361,6 +361,19 @@ def on_whatsapp_after_insert(doc, method=None):
 		# DEBUG: Log that the function was called
 		frappe.logger("ai_module.debug").info(f"AI HOOK TRIGGERED: on_whatsapp_after_insert called for doc={doc.name}, type={doc.get('type')}")
 		
+		# DEBUG: Log more details about the document
+		frappe.logger("ai_module.debug").info(f"AI HOOK DOC DETAILS: name={doc.name}, type={doc.get('type')}, from={doc.get('from')}, message={doc.get('message')[:50] if doc.get('message') else 'None'}...")
+		
+		# DEBUG: Log the source of the document (if available)
+		try:
+			import inspect
+			frame = inspect.currentframe()
+			caller_frame = frame.f_back
+			caller_filename = caller_frame.f_code.co_filename if caller_frame else "unknown"
+			frappe.logger("ai_module.debug").info(f"AI HOOK CALLER: {caller_filename}")
+		except:
+			frappe.logger("ai_module.debug").info("AI HOOK CALLER: Could not determine caller")
+		
 		apply_environment()
 		
 		# Handle outgoing messages

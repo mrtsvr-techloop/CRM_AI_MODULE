@@ -344,7 +344,93 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
-	# Test 8: WhatsApp Real Flow Simulation
+	# Test 8: Queue Processing Test
+	def test_queue_processing():
+		"""Test if queue processing works or if we need inline processing."""
+		log_debug("Testing queue processing...")
+		
+		try:
+			from .integrations.whatsapp import _enqueue_or_process, _get_queue_config
+			import frappe
+			
+			# Check queue configuration
+			queue_name, timeout = _get_queue_config()
+			log_debug("Queue config", {"queue_name": queue_name, "timeout": timeout})
+			
+			# Test payload
+			test_payload = {
+				"name": "test_queue_message",
+				"type": "Incoming",
+				"from": "+393926012793",
+				"message": "test queue processing",
+				"content_type": "text"
+			}
+			
+			# Try to enqueue a test job
+			log_debug("Attempting to enqueue test job...")
+			
+			try:
+				frappe.enqueue(
+					"ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
+					queue=queue_name,
+					job_id="test_queue_job",
+					payload=test_payload,
+					now=False,
+					timeout=timeout,
+					enqueue_after_commit=True,
+				)
+				
+				log_debug("Job enqueued successfully")
+				
+				# Check if job exists in queue
+				import time
+				time.sleep(1)  # Wait a moment
+				
+				# Try to get job status (this might not work depending on Frappe version)
+				try:
+					job = frappe.get_doc("Scheduled Job Log", {"job_id": "test_queue_job"})
+					job_status = job.status
+				except:
+					job_status = "unknown"
+				
+				return {
+					"status": "pass",
+					"message": "Queue processing appears to work",
+					"queue_info": {
+						"queue_name": queue_name,
+						"timeout": timeout,
+						"job_enqueued": True,
+						"job_status": job_status
+					}
+				}
+				
+			except Exception as e:
+				log_debug("Queue enqueue failed", {"error": str(e)})
+				return {
+					"status": "warning",
+					"message": f"Queue processing failed: {str(e)}",
+					"recommendation": "Enable inline processing for development",
+					"queue_info": {
+						"queue_name": queue_name,
+						"timeout": timeout,
+						"job_enqueued": False,
+						"error": str(e)
+					}
+				}
+			
+		except Exception as e:
+			log_debug("FAILED queue processing test", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Queue processing test failed: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
+	# Test 9: WhatsApp Real Flow Simulation
 	def test_whatsapp_real_flow():
 		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
 		log_debug("Testing WhatsApp REAL FLOW simulation...")
@@ -494,6 +580,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	results["tests"]["whatsapp_autoreply_settings"] = safe_test("WhatsApp Autoreply Settings", test_whatsapp_autoreply_settings)
 	results["tests"]["ai_direct_execution"] = safe_test("AI Direct Execution", test_ai_direct_execution)
 	results["tests"]["whatsapp_settings"] = safe_test("WhatsApp Settings", test_whatsapp_settings)
+	results["tests"]["queue_processing"] = safe_test("Queue Processing", test_queue_processing)
 	results["tests"]["whatsapp_real_flow"] = safe_test("WhatsApp Real Flow", test_whatsapp_real_flow)
 	
 	log_debug("All AI tests completed")

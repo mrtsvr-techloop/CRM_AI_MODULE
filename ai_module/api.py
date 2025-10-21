@@ -699,6 +699,7 @@ def run_diagnostics() -> Dict[str, Any]:
 		"""Test AI initialization - CAPTURE EVERYTHING."""
 		log_debug("Testing AI initialization...")
 		
+		# Test 1: Import bootstrap
 		try:
 			from .agents.bootstrap import initialize
 			log_debug("Bootstrap module imported successfully")
@@ -706,13 +707,16 @@ def run_diagnostics() -> Dict[str, Any]:
 			log_debug("FAILED to import bootstrap", {"error": str(e), "traceback": traceback.format_exc()})
 			return {"status": "error", "message": f"Failed to import bootstrap: {str(e)}"}
 		
+		# Test 2: Call initialize()
 		try:
+			log_debug("Calling initialize()...")
 			initialize()
 			log_debug("Bootstrap initialize() called successfully")
 		except Exception as e:
 			log_debug("FAILED to call initialize()", {"error": str(e), "traceback": traceback.format_exc()})
 			return {"status": "error", "message": f"Failed to initialize: {str(e)}"}
 		
+		# Test 3: Import registry
 		try:
 			from .agents.registry import _TOOL_REGISTRY, _AGENT_REGISTRY
 			log_debug("Registry imported successfully", {"tools": len(_TOOL_REGISTRY), "agents": len(_AGENT_REGISTRY)})
@@ -720,14 +724,156 @@ def run_diagnostics() -> Dict[str, Any]:
 			log_debug("FAILED to import registry", {"error": str(e), "traceback": traceback.format_exc()})
 			return {"status": "error", "message": f"Failed to import registry: {str(e)}"}
 		
+		# Test 4: Check tools and agents
+		tools_info = []
+		for tool_name, tool_func in _TOOL_REGISTRY.items():
+			try:
+				tools_info.append({
+					"name": tool_name,
+					"function": str(tool_func),
+					"module": getattr(tool_func, '__module__', 'Unknown')
+				})
+			except Exception as e:
+				tools_info.append({
+					"name": tool_name,
+					"error": str(e)
+				})
+		
+		agents_info = []
+		for agent_name, agent_obj in _AGENT_REGISTRY.items():
+			try:
+				agents_info.append({
+					"name": agent_name,
+					"type": type(agent_obj).__name__,
+					"instructions": getattr(agent_obj, 'instructions', 'No instructions')[:100] + "..." if hasattr(agent_obj, 'instructions') else 'No instructions'
+				})
+			except Exception as e:
+				agents_info.append({
+					"name": agent_name,
+					"error": str(e)
+				})
+		
+		log_debug("Tools and agents analyzed", {"tools": tools_info, "agents": agents_info})
+		
 		return {
 			"status": "pass",
 			"message": f"AI Module initialized with {len(_TOOL_REGISTRY)} tools and {len(_AGENT_REGISTRY)} agents",
 			"tool_count": len(_TOOL_REGISTRY),
 			"agent_count": len(_AGENT_REGISTRY),
 			"tools": list(_TOOL_REGISTRY.keys()),
-			"agents": list(_AGENT_REGISTRY.keys())
-	}
+			"agents": list(_AGENT_REGISTRY.keys()),
+			"tools_detail": tools_info,
+			"agents_detail": agents_info
+		}
+	
+	def test_ai_session_creation():
+		"""Test AI session creation - CAPTURE EVERYTHING."""
+		log_debug("Testing AI session creation...")
+		
+		# Test creating a simple session
+		try:
+			from .agents.threads import run_with_responses_api
+			log_debug("run_with_responses_api imported successfully")
+		except Exception as e:
+			log_debug("FAILED to import run_with_responses_api", {"error": str(e), "traceback": traceback.format_exc()})
+			return {"status": "error", "message": f"Failed to import run_with_responses_api: {str(e)}"}
+		
+		# Test session creation with a simple message
+		try:
+			log_debug("Attempting to create test session...")
+			
+			# This is a test call - we expect it might fail but we want to see WHY
+			test_result = run_with_responses_api(
+				message="Test message",
+				phone_number="+1234567890",
+				session_id="test_session_123"
+			)
+			
+			log_debug("Test session created successfully", {"result": test_result})
+			
+			return {
+				"status": "pass",
+				"message": "Test session created successfully",
+				"test_result": test_result
+			}
+			
+		except Exception as e:
+			log_debug("FAILED to create test session", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error", 
+				"message": f"Failed to create test session: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+	
+	def test_ai_environment():
+		"""Test AI environment setup - CAPTURE EVERYTHING."""
+		log_debug("Testing AI environment...")
+		
+		# Test environment variables
+		try:
+			apply_environment()
+			env = get_environment()
+			log_debug("Environment applied and retrieved", {"keys": list(env.keys())})
+		except Exception as e:
+			log_debug("FAILED to apply/get environment", {"error": str(e), "traceback": traceback.format_exc()})
+			return {"status": "error", "message": f"Environment setup failed: {str(e)}"}
+		
+		# Check specific AI environment variables
+		ai_vars = {}
+		required_vars = [
+			"AI_AGENT_NAME",
+			"AI_ASSISTANT_NAME", 
+			"AI_ASSISTANT_MODEL",
+			"AI_AUTOREPLY",
+			"AI_WHATSAPP_INLINE",
+			"AI_WHATSAPP_QUEUE",
+			"AI_WHATSAPP_TIMEOUT",
+			"OPENAI_API_KEY",
+			"OPENAI_ORG_ID",
+			"OPENAI_PROJECT"
+		]
+		
+		for var in required_vars:
+			value = env.get(var)
+			if value:
+				# Mask sensitive values
+				if "key" in var.lower() or "secret" in var.lower():
+					ai_vars[var] = f"{str(value)[:10]}...{str(value)[-4:]}" if len(str(value)) > 14 else "***"
+				else:
+					ai_vars[var] = value
+			else:
+				ai_vars[var] = None
+				log_debug(f"Missing environment variable: {var}")
+		
+		log_debug("AI environment variables checked", {"vars": ai_vars})
+		
+		# Test OpenAI connection
+		try:
+			import openai
+			log_debug("OpenAI module imported successfully")
+			
+			# Try to get client (this will test API key)
+			client = openai.OpenAI()
+			log_debug("OpenAI client created successfully")
+			
+		except Exception as e:
+			log_debug("FAILED to create OpenAI client", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"OpenAI setup failed: {str(e)}",
+				"environment_vars": ai_vars
+			}
+		
+		return {
+			"status": "pass",
+			"message": "AI environment setup successful",
+			"environment_vars": ai_vars,
+			"openai_client": "Created successfully"
+		}
 	
 	# Run all tests using the modular functions
 	log_debug("Starting diagnostics run...")
@@ -739,6 +885,8 @@ def run_diagnostics() -> Dict[str, Any]:
 	results["tests"]["whatsapp_messages"] = safe_test("WhatsApp Messages", test_whatsapp_messages)
 	results["tests"]["recent_errors"] = safe_test("Recent Errors", test_recent_errors)
 	results["tests"]["ai_initialization"] = safe_test("AI Initialization", test_ai_initialization)
+	results["tests"]["ai_session_creation"] = safe_test("AI Session Creation", test_ai_session_creation)
+	results["tests"]["ai_environment"] = safe_test("AI Environment", test_ai_environment)
 	
 	log_debug("All tests completed")
 	

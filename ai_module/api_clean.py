@@ -1,256 +1,7 @@
-"""AI Module Public API.
-
-Provides whitelisted endpoints for AI agent management and debugging.
-"""
-
-from __future__ import annotations
-
-from typing import Any, Dict, List, Optional
-
 import frappe
-
-from .agents import Agent, register_agent, register_tool, list_agents, list_tools, run_agent
-from .agents.config import apply_environment, get_environment
-
-
-@frappe.whitelist(methods=["GET"])
-def ai_debug_env() -> Dict[str, Any]:
-	"""Return the effective environment and session status used by the AI module.
-
-	Useful on Cloud to verify what the app is actually reading without shell access.
-	
-	Note: With Responses API, we no longer persist assistant_id.
-	"""
-	apply_environment()
-	env = get_environment()
-	
-	# Get session map paths
-	thread_map_path = None
-	response_map_path = None
-	
-	try:
-		thread_map_path = frappe.utils.get_site_path("private", "files", "ai_whatsapp_threads.json")
-		response_map_path = frappe.utils.get_site_path("private", "files", "ai_response_map.json")
-	except Exception:
-		pass
-
-	def _exists(path: Optional[str]) -> bool:
-		import os
-		return bool(path and os.path.exists(path))
-
-	# Only expose relevant keys; do not echo secrets back
-	visible_keys = {
-		"AI_AGENT_NAME",
-		"AI_ASSISTANT_NAME",
-		"AI_ASSISTANT_MODEL",
-		"AI_AUTOREPLY",
-		"AI_WHATSAPP_INLINE",
-		"AI_WHATSAPP_QUEUE",
-		"AI_WHATSAPP_TIMEOUT",
-		"OPENAI_ORG_ID",
-		"OPENAI_BASE_URL",
-		"AI_TOOL_CALL_MODE",
-	}
-
-	return {
-		"environment": {k: v for k, v in env.items() if k in visible_keys},
-		"session_files": {
-			"thread_map": {
-				"path": thread_map_path,
-				"exists": _exists(thread_map_path),
-			},
-			"response_map": {
-				"path": response_map_path,
-				"exists": _exists(response_map_path),
-			},
-		},
-		"agents": list_agents(),
-		"tools": list_tools(),
-	}
-
-
-@frappe.whitelist(methods=["GET"])
-def ai_debug_sessions() -> Dict[str, Any]:
-	"""Return current AI session status."""
-	try:
-		from .agents.threads import _load_json_map
-		
-		thread_map = _load_json_map("ai_whatsapp_threads.json")
-		response_map = _load_json_map("ai_response_map.json")
-		
-		return {
-			"thread_map": thread_map,
-			"response_map": response_map,
-			"session_count": len(thread_map),
-			"response_count": len(response_map),
-		}
-	except Exception as e:
-		return {
-			"error": str(e),
-			"thread_map": {},
-			"response_map": {},
-			"session_count": 0,
-			"response_count": 0,
-		}
-
-
-@frappe.whitelist(methods=["POST"])
-def ai_debug_run_agent(
-	agent_name: str,
-	input_text: str,
-	session_id: Optional[str] = None,
-	**kwargs: Any,
-) -> Dict[str, Any]:
-	"""Run an AI agent for debugging purposes."""
-	try:
-		result = run_agent(
-			agent_or_name=agent_name,
-			input_text=input_text,
-			session_id=session_id,
-			**kwargs,
-		)
-		return {
-			"success": True,
-			"result": result,
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"traceback": frappe.get_traceback(),
-		}
-
-
-@frappe.whitelist(methods=["GET"])
-def ai_debug_tools() -> Dict[str, Any]:
-	"""Return information about registered AI tools."""
-	try:
-		tools = list_tools()
-		tool_info = {}
-		
-		for tool_name, tool_func in tools.items():
-			tool_info[tool_name] = {
-				"name": tool_name,
-				"function": tool_func.__name__ if hasattr(tool_func, '__name__') else str(tool_func),
-				"module": tool_func.__module__ if hasattr(tool_func, '__module__') else "unknown",
-			}
-		
-		return {
-			"success": True,
-			"tools": tool_info,
-			"tool_count": len(tools),
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"tools": {},
-			"tool_count": 0,
-		}
-
-
-@frappe.whitelist(methods=["GET"])
-def ai_debug_agents() -> Dict[str, Any]:
-	"""Return information about registered AI agents."""
-	try:
-		agents = list_agents()
-		agent_info = {}
-		
-		for agent_name, agent_obj in agents.items():
-			agent_info[agent_name] = {
-				"name": agent_name,
-				"type": type(agent_obj).__name__,
-				"module": agent_obj.__class__.__module__ if hasattr(agent_obj, '__class__') else "unknown",
-			}
-		
-		return {
-			"success": True,
-			"agents": agent_info,
-			"agent_count": len(agents),
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"agents": {},
-			"agent_count": 0,
-		}
-
-
-@frappe.whitelist(methods=["POST"])
-def ai_debug_whatsapp_message(
-	phone_number: str,
-	message: str,
-	content_type: str = "text",
-) -> Dict[str, Any]:
-	"""Simulate a WhatsApp message for debugging."""
-	try:
-		from .integrations.whatsapp import process_incoming_whatsapp_message
-		
-		payload = {
-			"from": phone_number,
-			"message": message,
-			"content_type": content_type,
-			"timestamp": frappe.utils.now(),
-		}
-		
-		result = process_incoming_whatsapp_message(payload)
-		
-		return {
-			"success": True,
-			"payload": payload,
-			"result": result,
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"traceback": frappe.get_traceback(),
-		}
-
-
-@frappe.whitelist(methods=["GET"])
-def ai_debug_settings() -> Dict[str, Any]:
-	"""Return AI Assistant Settings for debugging."""
-	try:
-		settings = frappe.get_single("AI Assistant Settings")
-		return {
-			"success": True,
-			"settings": {
-				"assistant_id": settings.assistant_id,
-				"model": settings.model,
-				"enabled": settings.enabled,
-				"name": settings.name,
-			},
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"settings": {},
-		}
-
-
-@frappe.whitelist(methods=["POST"])
-def ai_debug_reset_sessions() -> Dict[str, Any]:
-	"""Reset AI WhatsApp sessions (Cloud-friendly endpoint)."""
-	try:
-		from .agents.threads import _save_json_map
-		
-		# Clear session maps
-		_save_json_map("ai_whatsapp_threads.json", {})
-		_save_json_map("ai_response_map.json", {})
-		
-		return {
-			"success": True,
-			"message": "AI sessions reset successfully",
-		}
-	except Exception as e:
-		return {
-			"success": False,
-			"error": str(e),
-			"traceback": frappe.get_traceback(),
-		}
+import os
+import traceback
+from typing import Dict, Any
 
 
 @frappe.whitelist()
@@ -296,7 +47,6 @@ def run_diagnostics():
 
 	# Check 2: API Key Configuration
 	try:
-		import os
 		api_key = os.getenv('OPENAI_API_KEY')
 		if api_key:
 			log_check("api_key", "pass", "OpenAI API key is configured", {
@@ -321,7 +71,6 @@ def run_diagnostics():
 
 	# Check 4: Session Files
 	try:
-		import os
 		session_files = []
 		thread_files = []
 		lang_files = []
@@ -422,7 +171,6 @@ def run_diagnostics():
 	try:
 		import platform
 		import sys
-		import os
 		
 		system_info = {
 			"python_version": sys.version,

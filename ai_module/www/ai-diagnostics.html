@@ -342,6 +342,7 @@
             
             <div class="tab-buttons">
                 <button onclick="showTab('diagnostics')" id="diagnosticsTab" class="tab-button active">🔍 Diagnostics</button>
+                <button onclick="showTab('tests')" id="testsTab" class="tab-button">🧪 AI Tests</button>
                 <button onclick="showTab('memory')" id="memoryTab" class="tab-button">🧠 Memory Viewer</button>
             </div>
             
@@ -349,6 +350,17 @@
                 <div>
                     <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
                     <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+                </div>
+            </div>
+            
+            <div id="testsContent" class="tab-content" style="display: none;">
+                <div class="search-section">
+                    <h3>🧪 AI Tests</h3>
+                    <p>Test the AI system with a specific phone number to verify functionality.</p>
+                    <div class="search-form">
+                        <input type="text" id="testPhoneInput" placeholder="Enter phone number (e.g., +393926012793)" value="+393926012793" />
+                        <button onclick="runAITests()" class="test-button">🚀 Run AI Tests</button>
+                    </div>
                 </div>
             </div>
             
@@ -626,7 +638,7 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.message) {
-                        displayResults(data.message);
+                        displayDiagnosticsResults(data.message);
                     } else {
                         resultsDiv.innerHTML = '<div class="status fail">Error: ' + JSON.stringify(data) + '</div>';
                     }
@@ -636,13 +648,86 @@
                 });
         }
         
-        function displayResults(results) {
+        // AI Tests functions
+        function runAITests() {
+            const phoneInput = document.getElementById('testPhoneInput');
+            const phoneNumber = phoneInput.value.trim();
+            
+            if (!phoneNumber) {
+                showError('Please enter a phone number');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '<div class="loading">Running AI tests...</div>';
+            
+            fetch('/api/method/ai_module.api.run_ai_tests_api', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    phone_number: phoneNumber
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    displayTestResults(data.message);
+                } else {
+                    resultsDiv.innerHTML = '<div class="status fail">Error: ' + JSON.stringify(data) + '</div>';
+                }
+            })
+            .catch(error => {
+                resultsDiv.innerHTML = '<div class="status fail">Error: ' + error.message + '</div>';
+            });
+        }
+        
+        function displayDiagnosticsResults(results) {
             const resultsDiv = document.getElementById('results');
             
             let html = `
-                <div class="status ${results.overall_status}">
-                    ${results.overall_status === 'pass' ? '✅' : results.overall_status === 'warning' ? '⚠️' : '❌'} 
-                    ${results.overall_message}
+                <div class="status ${results.status}">
+                    ${results.status === 'success' ? '✅' : results.status === 'warning' ? '⚠️' : '❌'} 
+                    Diagnostics Status: ${results.status.toUpperCase()}
+                </div>
+                <div class="status pass">
+                    📊 Summary: ${results.summary.passed} passed, ${results.summary.failed} failed, ${results.summary.warnings} warnings
+                </div>
+            `;
+            
+            // Display each check
+            for (const [checkName, check] of Object.entries(results.checks)) {
+                html += `
+                    <div class="test">
+                        <div class="test-header">
+                            <span class="test-name">${formatTestName(checkName)}</span>
+                            <span class="badge ${check.status}">${check.status.toUpperCase()}</span>
+                        </div>
+                        <div class="test-details">
+                            ${check.message || ''}
+                        </div>
+                        ${check.data ? `
+                            <pre>${JSON.stringify(check.data, null, 2)}</pre>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            html += `<div class="timestamp">Last run: ${results.timestamp}</div>`;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function displayTestResults(results) {
+            const resultsDiv = document.getElementById('results');
+            
+            let html = `
+                <div class="status pass">
+                    🧪 AI Tests completed for: ${results.phone_number}
+                </div>
+                <div class="status pass">
+                    📊 Tests run: ${Object.keys(results.tests).length}
                 </div>
             `;
             
@@ -657,9 +742,27 @@
                         <div class="test-details">
                             ${test.message || ''}
                         </div>
-                        ${test.errors && test.errors.length > 0 ? `
-                            <pre>${JSON.stringify(test.errors, null, 2)}</pre>
+                        ${test.data ? `
+                            <pre>${JSON.stringify(test.data, null, 2)}</pre>
                         ` : ''}
+                        ${test.error ? `
+                            <div class="error">Error: ${JSON.stringify(test.error, null, 2)}</div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+            
+            // Display debug log
+            if (results.debug_log && results.debug_log.length > 0) {
+                html += `
+                    <div class="test">
+                        <div class="test-header">
+                            <span class="test-name">Debug Log</span>
+                            <span class="badge pass">${results.debug_log.length} entries</span>
+                        </div>
+                        <div class="test-details">
+                            <pre>${results.debug_log.map(entry => `[${entry.timestamp}] ${entry.message}${entry.data ? '\n' + JSON.stringify(entry.data, null, 2) : ''}`).join('\n\n')}</pre>
+                        </div>
                     </div>
                 `;
             }

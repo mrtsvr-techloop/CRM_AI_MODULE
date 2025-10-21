@@ -362,7 +362,7 @@ def on_whatsapp_after_insert(doc, method=None):
 		frappe.logger("ai_module.debug").info(f"AI HOOK TRIGGERED: on_whatsapp_after_insert called for doc={doc.name}, type={doc.get('type')}")
 		
 		# DEBUG: Log more details about the document
-		frappe.logger("ai_module.debug").info(f"AI HOOK DOC DETAILS: name={doc.name}, type={doc.get('type')}, from={doc.get('from')}, message={doc.get('message')[:50] if doc.get('message') else 'None'}...")
+		frappe.logger("ai_module.debug").info(f"AI HOOK DOC DETAILS: name={doc.name}, type={doc.get('type')}, from={doc.get('from')}, message={doc.get('message')[:50] if doc.get('message') else 'None'}..., status={doc.get('status')}")
 		
 		# DEBUG: Log the source of the document (if available)
 		try:
@@ -404,6 +404,17 @@ def on_whatsapp_after_insert(doc, method=None):
 		if is_human_active:
 			_log().info("Human active recently; skipping AI reply")
 			return
+		
+		# DEBUG: Normalize phone number for consistency
+		original_from = from_field
+		if from_field:
+			# Remove + prefix and normalize
+			normalized_from = from_field.lstrip('+')
+			frappe.logger("ai_module.debug").info(f"AI HOOK PHONE NORMALIZATION: original={original_from}, normalized={normalized_from}")
+			
+			# Update the document with normalized phone number
+			setattr(doc, 'from', normalized_from)
+			frappe.logger("ai_module.debug").info(f"AI HOOK PHONE UPDATED: doc.from={getattr(doc, 'from', None)}")
 		
 		# Ensure contact exists
 		_ensure_contact_exists(doc)

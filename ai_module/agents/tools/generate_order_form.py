@@ -8,7 +8,7 @@ SCHEMA: Dict[str, Any] = {
         "name": "generate_order_confirmation_form",
         "description": (
             "Generate a WhatsApp order confirmation form link with pre-filled data. "
-            "This creates a secure Temp_Ordine record that customers can access to confirm their order. "
+            "This creates a secure FCRM TEMP ORDINE record that customers can access to confirm their order. "
             "The form is pre-populated with the order details extracted from the conversation."
         ),
         "parameters": {
@@ -58,7 +58,7 @@ SCHEMA: Dict[str, Any] = {
 def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     """Generate a WhatsApp order confirmation form link with pre-filled data.
     
-    This function creates a secure Temp_Ordine record that customers can use to confirm their order.
+    This function creates a secure FCRM TEMP ORDINE record that customers can use to confirm their order.
     The form is pre-populated with the order details extracted from the conversation.
     
     Args:
@@ -71,7 +71,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     Returns:
         {
             "success": bool,
-            "form_url": str,  # Short URL to Temp_Ordine
+            "form_url": str,  # Short URL to FCRM TEMP ORDINE
             "message": str,
             "order_summary": {
                 "customer_name": str,
@@ -106,7 +106,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                     "error": f"Product {i+1} missing product_id or product_quantity"
                 }
         
-        # Create Temp_Ordine record
+        # Create FCRM TEMP ORDINE record
         try:
             import frappe
             import time
@@ -124,10 +124,10 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                 "notes": kwargs.get("notes", "")
             }
             
-            # Create Temp_Ordine record
+            # Create FCRM TEMP ORDINE record
             temp_order_doc = frappe.get_doc({
-                "doctype": "Temp_Ordine",
-                "order_data": json.dumps(order_data),
+                "doctype": "FCRM TEMP ORDINE",
+                "content": json.dumps(order_data),
                 "created_at": current_time,
                 "expires_at": expires_at,
                 "status": "Active"
@@ -136,7 +136,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             temp_order_doc.insert(ignore_permissions=True)
             temp_order_id = temp_order_doc.name
             
-            # Build form URL using Temp_Ordine ID
+            # Build form URL using FCRM TEMP ORDINE ID
             try:
                 from frappe.utils import get_url
                 form_url = get_url(f"/order_confirmation/{temp_order_id}")
@@ -160,7 +160,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         except Exception as frappe_error:
             return {
                 "success": False,
-                "error": f"Error creating Temp_Ordine: {str(frappe_error)}"
+                "error": f"Error creating FCRM TEMP ORDINE: {str(frappe_error)}"
             }
         
     except Exception as e:

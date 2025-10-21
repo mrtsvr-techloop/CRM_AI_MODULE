@@ -264,7 +264,87 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
-	# Test 6: WhatsApp Real Flow Simulation
+	# Test 7: WhatsApp Settings Check
+	def test_whatsapp_settings():
+		"""Test WhatsApp settings to see why AI doesn't respond."""
+		log_debug("Testing WhatsApp settings...")
+		
+		try:
+			from .integrations.whatsapp import _should_process_inline, _should_autoreply, _get_ai_settings
+			from .agents.config import get_environment
+			
+			# Check inline processing
+			should_inline = _should_process_inline()
+			log_debug("Inline processing check", {"should_process_inline": should_inline})
+			
+			# Check autoreply
+			should_autoreply = _should_autoreply()
+			log_debug("Autoreply check", {"should_autoreply": should_autoreply})
+			
+			# Check AI settings
+			settings = _get_ai_settings()
+			log_debug("AI Settings", {
+				"settings_exists": settings is not None,
+				"use_settings_override": getattr(settings, "use_settings_override", None) if settings else None,
+				"wa_force_inline": getattr(settings, "wa_force_inline", None) if settings else None,
+				"wa_enable_autoreply": getattr(settings, "wa_enable_autoreply", None) if settings else None
+			})
+			
+			# Check environment
+			env = get_environment()
+			log_debug("Environment variables", {
+				"AI_WHATSAPP_INLINE": env.get("AI_WHATSAPP_INLINE"),
+				"AI_AUTOREPLY": env.get("AI_AUTOREPLY"),
+				"AI_AGENT_NAME": env.get("AI_AGENT_NAME")
+			})
+			
+			# Determine status
+			if should_inline and should_autoreply:
+				status = "pass"
+				message = "All WhatsApp settings are correct"
+			elif not should_inline:
+				status = "warning"
+				message = "Inline processing is disabled - messages will be queued"
+			elif not should_autoreply:
+				status = "warning"
+				message = "Autoreply is disabled - AI won't send responses"
+			else:
+				status = "error"
+				message = "Multiple settings issues detected"
+			
+			return {
+				"status": status,
+				"message": message,
+				"settings": {
+					"should_process_inline": should_inline,
+					"should_autoreply": should_autoreply,
+					"ai_settings": {
+						"exists": settings is not None,
+						"use_settings_override": getattr(settings, "use_settings_override", None) if settings else None,
+						"wa_force_inline": getattr(settings, "wa_force_inline", None) if settings else None,
+						"wa_enable_autoreply": getattr(settings, "wa_enable_autoreply", None) if settings else None
+					},
+					"environment": {
+						"AI_WHATSAPP_INLINE": env.get("AI_WHATSAPP_INLINE"),
+						"AI_AUTOREPLY": env.get("AI_AUTOREPLY"),
+						"AI_AGENT_NAME": env.get("AI_AGENT_NAME")
+					}
+				}
+			}
+			
+		except Exception as e:
+			log_debug("FAILED WhatsApp settings test", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"WhatsApp settings test failed: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
+	# Test 8: WhatsApp Real Flow Simulation
 	def test_whatsapp_real_flow():
 		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
 		log_debug("Testing WhatsApp REAL FLOW simulation...")
@@ -413,6 +493,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	results["tests"]["ai_agent_execution"] = safe_test("AI Agent Execution", test_ai_agent_execution)
 	results["tests"]["whatsapp_autoreply_settings"] = safe_test("WhatsApp Autoreply Settings", test_whatsapp_autoreply_settings)
 	results["tests"]["ai_direct_execution"] = safe_test("AI Direct Execution", test_ai_direct_execution)
+	results["tests"]["whatsapp_settings"] = safe_test("WhatsApp Settings", test_whatsapp_settings)
 	results["tests"]["whatsapp_real_flow"] = safe_test("WhatsApp Real Flow", test_whatsapp_real_flow)
 	
 	log_debug("All AI tests completed")

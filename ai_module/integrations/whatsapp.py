@@ -529,7 +529,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		# Configuration is passed directly to responses.create
 		
 		# Call AI agent
-		from .agents.runner import run_agent
+		from ..agents.runner import run_agent
 		result = run_agent(
 			agent_or_name=agent_name,
 			input_text=composed_message,

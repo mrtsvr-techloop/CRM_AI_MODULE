@@ -430,7 +430,66 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
-	# Test 9: WhatsApp Real Flow Simulation
+	# Test 9: Fix WhatsApp Settings
+	def test_fix_whatsapp_settings():
+		"""Fix WhatsApp settings to enable inline processing."""
+		log_debug("Fixing WhatsApp settings...")
+		
+		try:
+			from .integrations.whatsapp import _get_ai_settings
+			
+			# Get current settings
+			settings = _get_ai_settings()
+			if not settings:
+				return {
+					"status": "error",
+					"message": "AI Settings not found"
+				}
+			
+			log_debug("Current settings", {
+				"use_settings_override": getattr(settings, "use_settings_override", None),
+				"wa_force_inline": getattr(settings, "wa_force_inline", None),
+				"wa_enable_autoreply": getattr(settings, "wa_enable_autoreply", None)
+			})
+			
+			# Update settings to enable inline processing
+			settings.use_settings_override = 1
+			settings.wa_force_inline = 1  # Enable inline processing
+			settings.wa_enable_autoreply = 1  # Ensure autoreply is enabled
+			settings.save()
+			
+			log_debug("Settings updated successfully")
+			
+			# Verify the change
+			from .integrations.whatsapp import _should_process_inline, _should_autoreply
+			should_inline = _should_process_inline()
+			should_autoreply = _should_autoreply()
+			
+			return {
+				"status": "pass",
+				"message": "WhatsApp settings fixed successfully",
+				"settings": {
+					"use_settings_override": settings.use_settings_override,
+					"wa_force_inline": settings.wa_force_inline,
+					"wa_enable_autoreply": settings.wa_enable_autoreply,
+					"should_process_inline": should_inline,
+					"should_autoreply": should_autoreply
+				}
+			}
+			
+		except Exception as e:
+			log_debug("FAILED to fix WhatsApp settings", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Failed to fix WhatsApp settings: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
+	# Test 10: WhatsApp Real Flow Simulation
 	def test_whatsapp_real_flow():
 		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
 		log_debug("Testing WhatsApp REAL FLOW simulation...")
@@ -581,6 +640,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	results["tests"]["ai_direct_execution"] = safe_test("AI Direct Execution", test_ai_direct_execution)
 	results["tests"]["whatsapp_settings"] = safe_test("WhatsApp Settings", test_whatsapp_settings)
 	results["tests"]["queue_processing"] = safe_test("Queue Processing", test_queue_processing)
+	results["tests"]["fix_whatsapp_settings"] = safe_test("Fix WhatsApp Settings", test_fix_whatsapp_settings)
 	results["tests"]["whatsapp_real_flow"] = safe_test("WhatsApp Real Flow", test_whatsapp_real_flow)
 	
 	log_debug("All AI tests completed")

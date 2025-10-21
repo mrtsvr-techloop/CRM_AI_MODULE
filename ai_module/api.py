@@ -782,11 +782,24 @@ def run_diagnostics() -> Dict[str, Any]:
 		try:
 			log_debug("Attempting to create test session...")
 			
-			# This is a test call - we expect it might fail but we want to see WHY
+			# First, create a phone-to-session mapping for the test
+			test_phone = "+393926012793"
+			test_session_id = "test_session_123"
+			
+			# Load existing thread map
+			from .agents.threads import _load_json_map, _save_json_map, THREAD_MAP_FILE
+			thread_map = _load_json_map(THREAD_MAP_FILE)
+			
+			# Add our test mapping
+			thread_map[test_phone] = test_session_id
+			_save_json_map(THREAD_MAP_FILE, thread_map)
+			
+			log_debug("Created test phone-to-session mapping", {"phone": test_phone, "session": test_session_id})
+			
+			# Now try the test call
 			test_result = run_with_responses_api(
 				message="Test message",
-				phone_number="+1234567890",
-				session_id="test_session_123"
+				session_id=test_session_id
 			)
 			
 			log_debug("Test session created successfully", {"result": test_result})
@@ -794,7 +807,9 @@ def run_diagnostics() -> Dict[str, Any]:
 			return {
 				"status": "pass",
 				"message": "Test session created successfully",
-				"test_result": test_result
+				"test_result": test_result,
+				"test_phone": test_phone,
+				"test_session": test_session_id
 			}
 			
 		except Exception as e:

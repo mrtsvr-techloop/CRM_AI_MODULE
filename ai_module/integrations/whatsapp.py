@@ -374,6 +374,10 @@ def on_whatsapp_after_insert(doc, method=None):
 		except:
 			frappe.logger("ai_module.debug").info("AI HOOK CALLER: Could not determine caller")
 		
+		# DEBUG: Log timestamp for debugging
+		import datetime
+		frappe.logger("ai_module.debug").info(f"AI HOOK TIMESTAMP: {datetime.datetime.now()}")
+		
 		apply_environment()
 		
 		# Handle outgoing messages
@@ -387,8 +391,10 @@ def on_whatsapp_after_insert(doc, method=None):
 		frappe.logger("ai_module.debug").info(f"AI HOOK CHECK: is_incoming={is_incoming}, should_ignore={should_ignore}")
 		
 		if not is_incoming or should_ignore:
-			frappe.logger("ai_module.debug").info(f"AI HOOK SKIP: Not processing message {doc.name}")
+			frappe.logger("ai_module.debug").info(f"AI HOOK SKIP: Not processing message {doc.name} - is_incoming={is_incoming}, should_ignore={should_ignore}")
 			return
+		
+		frappe.logger("ai_module.debug").info(f"AI HOOK CONTINUE: Processing message {doc.name}")
 		
 		# Log incoming message
 		_log().info(

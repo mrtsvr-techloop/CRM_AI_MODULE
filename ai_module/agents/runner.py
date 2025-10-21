@@ -119,20 +119,32 @@ def run_agent(
 		print(result["final_output"])  # AI's response
 		print(result["thread_id"])     # For conversation continuity
 	"""
-	# Initialize agent system (registers tools, etc.)
-	initialize()
+	import os
 	
-	# Validate input
-	if not isinstance(input_text, str) or not input_text.strip():
-		raise ValueError("input_text must be a non-empty string")
+	# Set environment variable to indicate we're in AI tool call mode
+	# This prevents log files from being created during tool calls
+	os.environ['AI_TOOL_CALL_MODE'] = '1'
 	
-	# Execute via modern Responses API
-	output = _run_via_responses_api(input_text, session_id)
+	try:
+		# Initialize agent system (registers tools, etc.)
+		initialize()
+		
+		# Validate input
+		if not isinstance(input_text, str) or not input_text.strip():
+			raise ValueError("input_text must be a non-empty string")
+		
+		# Execute via modern Responses API
+		output = _run_via_responses_api(input_text, session_id)
+		
+		# Add agent name to output
+		agent_name = agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name)
+		
+		return {**output, "agent_name": agent_name}
 	
-	# Add agent name to output
-	agent_name = agent_or_name.name if isinstance(agent_or_name, Agent) else str(agent_or_name)
-	
-	return {**output, "agent_name": agent_name}
+	finally:
+		# Clean up environment variable
+		if 'AI_TOOL_CALL_MODE' in os.environ:
+			del os.environ['AI_TOOL_CALL_MODE']
 
 
 def run_agent_sync(

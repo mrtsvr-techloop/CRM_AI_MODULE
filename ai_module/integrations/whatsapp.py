@@ -358,25 +358,19 @@ def on_whatsapp_after_insert(doc, method=None):
 	Processes incoming messages and forwards them to AI assistant.
 	"""
 	try:
+		# Use resilient logger to avoid permission errors
+		from ..agents.logger_utils import get_resilient_logger
+		logger = get_resilient_logger("ai_module.whatsapp")
+		
 		# DEBUG: Log that the function was called
-		frappe.logger("ai_module.debug").info(f"AI HOOK TRIGGERED: on_whatsapp_after_insert called for doc={doc.name}, type={doc.get('type')}")
+		logger.info(f"AI HOOK TRIGGERED: on_whatsapp_after_insert called for doc={doc.name}, type={doc.get('type')}")
 		
 		# DEBUG: Log more details about the document
-		frappe.logger("ai_module.debug").info(f"AI HOOK DOC DETAILS: name={doc.name}, type={doc.get('type')}, from={doc.get('from')}, message={doc.get('message')[:50] if doc.get('message') else 'None'}..., status={doc.get('status')}")
-		
-		# DEBUG: Log the source of the document (if available)
-		try:
-			import inspect
-			frame = inspect.currentframe()
-			caller_frame = frame.f_back
-			caller_filename = caller_frame.f_code.co_filename if caller_frame else "unknown"
-			frappe.logger("ai_module.debug").info(f"AI HOOK CALLER: {caller_filename}")
-		except:
-			frappe.logger("ai_module.debug").info("AI HOOK CALLER: Could not determine caller")
+		logger.info(f"AI HOOK DOC DETAILS: name={doc.name}, type={doc.get('type')}, from={doc.get('from')}, message={doc.get('message')[:50] if doc.get('message') else 'None'}..., status={doc.get('status')}")
 		
 		# DEBUG: Log timestamp for debugging
 		import datetime
-		frappe.logger("ai_module.debug").info(f"AI HOOK TIMESTAMP: {datetime.datetime.now()}")
+		logger.info(f"AI HOOK TIMESTAMP: {datetime.datetime.now()}")
 		
 		apply_environment()
 		
@@ -388,13 +382,13 @@ def on_whatsapp_after_insert(doc, method=None):
 		# Skip non-incoming messages and reactions
 		is_incoming = _is_incoming_message(doc)
 		should_ignore = _should_ignore(doc)
-		frappe.logger("ai_module.debug").info(f"AI HOOK CHECK: is_incoming={is_incoming}, should_ignore={should_ignore}")
+		logger.info(f"AI HOOK CHECK: is_incoming={is_incoming}, should_ignore={should_ignore}")
 		
 		if not is_incoming or should_ignore:
-			frappe.logger("ai_module.debug").info(f"AI HOOK SKIP: Not processing message {doc.name} - is_incoming={is_incoming}, should_ignore={should_ignore}")
+			logger.info(f"AI HOOK SKIP: Not processing message {doc.name} - is_incoming={is_incoming}, should_ignore={should_ignore}")
 			return
 		
-		frappe.logger("ai_module.debug").info(f"AI HOOK CONTINUE: Processing message {doc.name}")
+		logger.info(f"AI HOOK CONTINUE: Processing message {doc.name}")
 		
 		# Log incoming message
 		_log().info(
@@ -405,7 +399,7 @@ def on_whatsapp_after_insert(doc, method=None):
 		# Skip if human is actively handling this conversation
 		from_field = doc.get("from")
 		is_human_active = _is_human_active(from_field)
-		frappe.logger("ai_module.debug").info(f"AI HOOK CHECK: from={from_field}, is_human_active={is_human_active}")
+		logger.info(f"AI HOOK CHECK: from={from_field}, is_human_active={is_human_active}")
 		
 		if is_human_active:
 			_log().info("Human active recently; skipping AI reply")
@@ -416,11 +410,11 @@ def on_whatsapp_after_insert(doc, method=None):
 		if from_field:
 			# Remove + prefix and normalize
 			normalized_from = from_field.lstrip('+')
-			frappe.logger("ai_module.debug").info(f"AI HOOK PHONE NORMALIZATION: original={original_from}, normalized={normalized_from}")
+			logger.info(f"AI HOOK PHONE NORMALIZATION: original={original_from}, normalized={normalized_from}")
 			
 			# Update the document with normalized phone number
 			setattr(doc, 'from', normalized_from)
-			frappe.logger("ai_module.debug").info(f"AI HOOK PHONE UPDATED: doc.from={getattr(doc, 'from', None)}")
+			logger.info(f"AI HOOK PHONE UPDATED: doc.from={getattr(doc, 'from', None)}")
 		
 		# Ensure contact exists
 		_ensure_contact_exists(doc)
@@ -431,24 +425,32 @@ def on_whatsapp_after_insert(doc, method=None):
 		# Build payload
 		payload = _build_payload(doc)
 		_log().info(f"Processing message {doc.name}")
-		frappe.logger("ai_module.debug").info(f"AI HOOK PAYLOAD: {payload}")
+		logger.info(f"AI HOOK PAYLOAD: {payload}")
 		
 		# Process inline or enqueue
 		should_process_inline = _should_process_inline()
-		frappe.logger("ai_module.debug").info(f"AI HOOK CHECK: should_process_inline={should_process_inline}")
+		logger.info(f"AI HOOK CHECK: should_process_inline={should_process_inline}")
 		
 		if should_process_inline:
 			_log().info(f"Processing inline for message={doc.name}")
-			frappe.logger("ai_module.debug").info(f"AI HOOK CALLING: process_incoming_whatsapp_message")
+			logger.info(f"AI HOOK CALLING: process_incoming_whatsapp_message")
 			process_incoming_whatsapp_message(payload)
 		else:
-			frappe.logger("ai_module.debug").info(f"AI HOOK CALLING: _enqueue_or_process")
+			logger.info(f"AI HOOK CALLING: _enqueue_or_process")
 			_enqueue_or_process(payload, doc.name)
 			
 	except Exception as e:
-		# DEBUG: Log the actual error
-		frappe.logger("ai_module.debug").error(f"AI HOOK ERROR: {str(e)}")
-		frappe.logger("ai_module.debug").error(f"AI HOOK TRACEBACK: {frappe.get_traceback()}")
+		# Use resilient logger for error handling too
+		try:
+			from ..agents.logger_utils import get_resilient_logger
+			logger = get_resilient_logger("ai_module.whatsapp")
+			logger.error(f"AI HOOK ERROR: {str(e)}")
+			logger.error(f"AI HOOK TRACEBACK: {frappe.get_traceback()}")
+		except:
+			# Fallback to console if even resilient logger fails
+			print(f"AI HOOK ERROR: {str(e)}")
+			print(f"AI HOOK TRACEBACK: {frappe.get_traceback()}")
+		
 		frappe.log_error(
 			message=frappe.get_traceback(),
 			title="ai_module.integrations.whatsapp.on_whatsapp_after_insert",
@@ -530,6 +532,7 @@ def _send_autoreply(payload: Dict[str, Any], reply_text: str) -> None:
 			"",
 			payload.get("name"),
 			"text",
+			"AI_Assistant",
 		)
 		_log().info(f"Created outbound message: {message_name}")
 	except Exception:
@@ -545,7 +548,10 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 	Calls AI functions directly via Python import and optionally sends auto-reply.
 	"""
 	try:
-		frappe.logger("ai_module.debug").info(f"PROCESS_INCOMING START: payload={payload}")
+		# Use resilient logger
+		from ..agents.logger_utils import get_resilient_logger
+		logger = get_resilient_logger("ai_module.whatsapp")
+		logger.info(f"PROCESS_INCOMING START: payload={payload}")
 		
 		# Ensure directories exist before processing
 		_ensure_directories()
@@ -584,7 +590,7 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		
 		# Handle auto-reply if enabled
 		should_autoreply = _should_autoreply()
-		frappe.logger("ai_module.debug").info(f"PROCESS_INCOMING CHECK: should_autoreply={should_autoreply}")
+		logger.info(f"PROCESS_INCOMING CHECK: should_autoreply={should_autoreply}")
 		
 		if should_autoreply:
 			reply_text = ""
@@ -592,16 +598,16 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 				reply_text = (result.get("final_output") or result.get("response") or "").strip()
 			
 			_log().info(f"Auto-reply enabled, reply length: {len(reply_text)}")
-			frappe.logger("ai_module.debug").info(f"PROCESS_INCOMING REPLY: text='{reply_text}', length={len(reply_text)}")
+			logger.info(f"PROCESS_INCOMING REPLY: text='{reply_text}', length={len(reply_text)}")
 			
 			if reply_text:
-				frappe.logger("ai_module.debug").info(f"PROCESS_INCOMING CALLING: _send_autoreply")
+				logger.info(f"PROCESS_INCOMING CALLING: _send_autoreply")
 				_send_autoreply(payload, reply_text)
 			else:
 				_log().warning("No reply text generated by AI")
-				frappe.logger("ai_module.debug").warning("PROCESS_INCOMING: No reply text generated by AI")
+				logger.warning("PROCESS_INCOMING: No reply text generated by AI")
 		else:
-			frappe.logger("ai_module.debug").info("PROCESS_INCOMING: Auto-reply disabled")
+			logger.info("PROCESS_INCOMING: Auto-reply disabled")
 		
 	except Exception:
 		frappe.log_error(

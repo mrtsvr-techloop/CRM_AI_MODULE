@@ -138,7 +138,7 @@ after_install = "ai_module.install.after_install"
 # Hook on document methods and events
 
 doc_events = {
-	"Communication": {
+	"WhatsApp Message": {
 		"after_insert": "ai_module.integrations.whatsapp.on_whatsapp_after_insert",
 	}
 }

@@ -314,7 +314,10 @@ def run_diagnostics():
 		log_check("ai_settings", "pass", "AI Assistant Settings found", {
 			"assistant_id": settings.assistant_id,
 			"model": settings.model,
-			"enabled": settings.enabled
+			"use_settings_override": settings.use_settings_override,
+			"wa_enable_autoreply": settings.wa_enable_autoreply,
+			"wa_enable_reaction": settings.wa_enable_reaction,
+			"api_key_present": settings.api_key_present
 		})
 	except Exception as e:
 		log_check("ai_settings", "error", f"AI Settings issue: {str(e)}")
@@ -402,16 +405,16 @@ def run_diagnostics():
 	# Check 7: AI Initialization
 	try:
 		from .agents.bootstrap import initialize
-		from .agents.config import get_assistant_config
+		from .agents.config import get_environment
 		from .agents.registry import get_registered_tools, get_registered_agents
 		
-		# Try to get config without initializing
-		config = get_assistant_config()
+		# Try to get environment and components
+		env = get_environment()
 		tools = get_registered_tools()
 		agents = get_registered_agents()
 		
 		log_check("ai_initialization", "pass", "AI system components accessible", {
-			"config": config,
+			"environment_keys": list(env.keys()),
 			"registered_tools": list(tools.keys()),
 			"registered_agents": list(agents.keys())
 		})
@@ -452,3 +455,101 @@ def run_ai_tests_api(phone_number: str = "+393926012793"):
 	"""API endpoint to run AI tests."""
 	from .test_api import run_ai_tests
 	return run_ai_tests(phone_number)
+
+
+@frappe.whitelist()
+def get_conversation_memory(phone_number: str):
+	"""Get conversation memory for a specific phone number."""
+	try:
+		from .agents.threads import _load_json_map
+		
+		# Load thread map
+		thread_map = _load_json_map("ai_whatsapp_threads.json")
+		
+		if phone_number not in thread_map:
+			return {
+				"success": False,
+				"error": f"No conversation found for {phone_number}"
+			}
+		
+		thread_id = thread_map[phone_number]
+		
+		# Load response map
+		response_map = _load_json_map("ai_response_map.json")
+		
+		# Load language file
+		lang_map = _load_json_map("ai_whatsapp_lang.json")
+		
+		# Build conversation data
+		conversation = {
+			"phone_number": phone_number,
+			"thread_id": thread_id,
+			"last_response_id": response_map.get(phone_number),
+			"language": lang_map.get(phone_number),
+			"profile": {},
+			"handoff": {},
+			"message_history": []
+		}
+		
+		return {
+			"success": True,
+			"conversation": conversation
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+
+@frappe.whitelist()
+def list_all_conversations():
+	"""List all active conversations."""
+	try:
+		from .agents.threads import _load_json_map
+		
+		# Load thread map
+		thread_map = _load_json_map("ai_whatsapp_threads.json")
+		
+		# Load response map
+		response_map = _load_json_map("ai_response_map.json")
+		
+		conversations = []
+		for phone_number, thread_id in thread_map.items():
+			conversations.append({
+				"phone_number": phone_number,
+				"thread_id": thread_id,
+				"has_response": phone_number in response_map
+			})
+		
+		return {
+			"success": True,
+			"conversations": conversations
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+
+@frappe.whitelist()
+def reset_sessions():
+	"""Reset AI WhatsApp sessions."""
+	try:
+		from .agents.threads import _save_json_map
+		
+		# Clear session maps
+		_save_json_map("ai_whatsapp_threads.json", {})
+		_save_json_map("ai_response_map.json", {})
+		_save_json_map("ai_whatsapp_lang.json", {})
+		
+		return {
+			"success": True,
+			"message": "AI sessions reset successfully"
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e)
+		}

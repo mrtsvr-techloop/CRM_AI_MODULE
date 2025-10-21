@@ -665,6 +665,7 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Frappe-CSRF-Token': frappe.csrf_token
                 },
                 body: JSON.stringify({
                     phone_number: phoneNumber
@@ -784,7 +785,10 @@
             }
             
             fetch('/api/method/ai_module.api.reset_sessions', {
-                method: 'POST'
+                method: 'POST',
+                headers: {
+                    'X-Frappe-CSRF-Token': frappe.csrf_token
+                }
             })
                 .then(response => response.json())
                 .then(data => {

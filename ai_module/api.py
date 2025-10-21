@@ -406,17 +406,17 @@ def run_diagnostics():
 	try:
 		from .agents.bootstrap import initialize
 		from .agents.config import get_environment
-		from .agents.registry import get_registered_tools, get_registered_agents
+		from .agents.registry import list_tools, list_agents
 		
 		# Try to get environment and components
 		env = get_environment()
-		tools = get_registered_tools()
-		agents = get_registered_agents()
+		tools = list_tools()
+		agents = list_agents()
 		
 		log_check("ai_initialization", "pass", "AI system components accessible", {
 			"environment_keys": list(env.keys()),
-			"registered_tools": list(tools.keys()),
-			"registered_agents": list(agents.keys())
+			"registered_tools": tools,
+			"registered_agents": agents
 		})
 	except Exception as e:
 		log_check("ai_initialization", "error", f"AI initialization check failed: {str(e)}")

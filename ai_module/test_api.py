@@ -1,5 +1,6 @@
 import frappe
 import traceback
+import time
 import os
 from typing import Dict, Any, Optional
 
@@ -201,7 +202,68 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
-	# Test 5: WhatsApp Real Flow Simulation
+	# Test 5: Direct AI Execution
+	def test_ai_direct_execution():
+		"""Test direct AI execution to see if it can respond to a message."""
+		log_debug("Testing direct AI execution...")
+		
+		try:
+			from .agents.runner import run_agent
+			from .agents.threads import _save_json_map
+			
+			# Create a test session
+			phone_number = "+393926012793"
+			session_id = f"test_session_{int(time.time())}"
+			
+			# Save session mapping
+			_save_json_map("ai_whatsapp_threads.json", {phone_number: session_id})
+			
+			# Try to run the agent directly
+			log_debug("Running AI agent directly...")
+			
+			result = run_agent(
+				agent_or_name="crm_assistant",  # Use the configured agent name
+				input_text="ciao - test direct execution",
+				session_id=session_id
+			)
+			
+			log_debug("AI execution result", {
+				"success": "response" in result,
+				"response_length": len(result.get("response", "")),
+				"response_preview": result.get("response", "")[:100] if result.get("response") else None,
+				"metadata": result
+			})
+			
+			# Check if we got a response
+			has_response = bool(result.get("response", "").strip())
+			
+			if has_response:
+				return {
+					"status": "pass",
+					"message": f"AI responded successfully! Response: {result.get('response', '')[:100]}...",
+					"response": result.get("response", ""),
+					"metadata": result
+				}
+			else:
+				return {
+					"status": "error",
+					"message": "AI execution completed but no response generated",
+					"result": result
+				}
+				
+		except Exception as e:
+			log_debug("FAILED direct AI execution", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"Direct AI execution failed: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
+	# Test 6: WhatsApp Real Flow Simulation
 	def test_whatsapp_real_flow():
 		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
 		log_debug("Testing WhatsApp REAL FLOW simulation...")
@@ -349,6 +411,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	results["tests"]["whatsapp_message_processing"] = safe_test("WhatsApp Message Processing", test_whatsapp_message_processing)
 	results["tests"]["ai_agent_execution"] = safe_test("AI Agent Execution", test_ai_agent_execution)
 	results["tests"]["whatsapp_autoreply_settings"] = safe_test("WhatsApp Autoreply Settings", test_whatsapp_autoreply_settings)
+	results["tests"]["ai_direct_execution"] = safe_test("AI Direct Execution", test_ai_direct_execution)
 	results["tests"]["whatsapp_real_flow"] = safe_test("WhatsApp Real Flow", test_whatsapp_real_flow)
 	
 	log_debug("All AI tests completed")

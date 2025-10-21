@@ -210,12 +210,19 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			# Step 1: Create a REAL WhatsApp Message DocType record
 			log_debug("Step 1: Creating REAL WhatsApp Message record...")
 			
+			# First, let's check what fields are available in WhatsApp Message DocType
+			meta = frappe.get_meta("WhatsApp Message")
+			available_fields = [field.fieldname for field in meta.fields]
+			log_debug("Available WhatsApp Message fields", {"fields": available_fields})
+			
+			# Try to create the document with the correct field names
 			whatsapp_doc = frappe.get_doc({
 				"doctype": "WhatsApp Message",
 				"type": "Incoming",
 				"from": phone_number,
 				"message": "ciao - test real flow",
-				"content_type": "text"
+				"content_type": "text",
+				"status": "Sent"
 			})
 			
 			# Save the document - this should trigger the hook
@@ -223,9 +230,10 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			log_debug("WhatsApp Message created successfully", {
 				"doc_name": whatsapp_doc.name,
 				"type": whatsapp_doc.type,
-				"from": whatsapp_doc.from_field,
+				"from": whatsapp_doc.from,
 				"message": whatsapp_doc.message,
-				"creation": str(whatsapp_doc.creation)
+				"creation": str(whatsapp_doc.creation),
+				"available_fields": available_fields
 			})
 			
 			# Step 2: Check if AI hook was triggered
@@ -307,9 +315,10 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				"whatsapp_doc": {
 					"name": whatsapp_doc.name,
 					"type": whatsapp_doc.type,
-					"from": whatsapp_doc.from_field,
+					"from": whatsapp_doc.from,
 					"message": whatsapp_doc.message,
-					"creation": str(whatsapp_doc.creation)
+					"creation": str(whatsapp_doc.creation),
+					"status": whatsapp_doc.status
 				},
 				"ai_response": {
 					"responded": ai_responded,

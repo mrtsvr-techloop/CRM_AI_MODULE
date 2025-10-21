@@ -201,6 +201,139 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				}
 			}
 
+	# Test 5: WhatsApp Real Flow Simulation
+	def test_whatsapp_real_flow():
+		"""Test the complete WhatsApp real flow - CREATE REAL WHATSAPP MESSAGE."""
+		log_debug("Testing WhatsApp REAL FLOW simulation...")
+		
+		try:
+			# Step 1: Create a REAL WhatsApp Message DocType record
+			log_debug("Step 1: Creating REAL WhatsApp Message record...")
+			
+			whatsapp_doc = frappe.get_doc({
+				"doctype": "WhatsApp Message",
+				"type": "Incoming",
+				"from": phone_number,
+				"message": "ciao - test real flow",
+				"content_type": "text",
+				"reference_doctype": None,
+				"reference_name": None
+			})
+			
+			# Save the document - this should trigger the hook
+			whatsapp_doc.insert()
+			log_debug("WhatsApp Message created successfully", {
+				"doc_name": whatsapp_doc.name,
+				"type": whatsapp_doc.type,
+				"from": whatsapp_doc.from_number or whatsapp_doc.from_field,
+				"message": whatsapp_doc.message
+			})
+			
+			# Step 2: Check if AI hook was triggered
+			log_debug("Step 2: Checking if AI hook was triggered...")
+			
+			# Wait a moment for async processing
+			import time
+			time.sleep(2)
+			
+			# Check if session files were created/updated
+			from .agents.threads import _load_json_map
+			thread_map = _load_json_map("ai_whatsapp_threads.json")
+			response_map = _load_json_map("ai_response_map.json")
+			
+			log_debug("Session files after WhatsApp message", {
+				"thread_map": thread_map,
+				"response_map": response_map,
+				"phone_in_threads": phone_number in thread_map,
+				"phone_in_responses": phone_number in response_map
+			})
+			
+			# Step 3: Check if AI responded
+			log_debug("Step 3: Checking if AI responded...")
+			
+			# Look for outgoing messages from AI
+			outgoing_messages = frappe.get_all(
+				"WhatsApp Message",
+				filters={
+					"type": "Outgoing",
+					"to": phone_number,
+					"creation": [">=", whatsapp_doc.creation]
+				},
+				fields=["name", "message", "creation"],
+				order_by="creation desc",
+				limit=5
+			)
+			
+			log_debug("Outgoing messages found", {
+				"count": len(outgoing_messages),
+				"messages": outgoing_messages
+			})
+			
+			# Step 4: Check error logs for any issues
+			log_debug("Step 4: Checking for errors...")
+			
+			recent_errors = frappe.get_all(
+				"Error Log",
+				filters={
+					"creation": [">=", whatsapp_doc.creation],
+					"method": ["like", "%whatsapp%"]
+				},
+				fields=["name", "error", "method", "creation"],
+				order_by="creation desc",
+				limit=5
+			)
+			
+			log_debug("Recent WhatsApp-related errors", {
+				"count": len(recent_errors),
+				"errors": recent_errors
+			})
+			
+			# Determine test result
+			ai_responded = len(outgoing_messages) > 0
+			hook_triggered = phone_number in thread_map
+			
+			if ai_responded:
+				status = "pass"
+				message = f"SUCCESS: AI responded! Found {len(outgoing_messages)} outgoing messages"
+			elif hook_triggered:
+				status = "warning"
+				message = "PARTIAL: Hook triggered but AI didn't respond"
+			else:
+				status = "error"
+				message = "FAILED: Hook not triggered or AI didn't process"
+			
+			return {
+				"status": status,
+				"message": message,
+				"whatsapp_doc": {
+					"name": whatsapp_doc.name,
+					"type": whatsapp_doc.type,
+					"from": whatsapp_doc.from_number or whatsapp_doc.from_field,
+					"message": whatsapp_doc.message,
+					"creation": str(whatsapp_doc.creation)
+				},
+				"ai_response": {
+					"responded": ai_responded,
+					"outgoing_messages": outgoing_messages,
+					"hook_triggered": hook_triggered,
+					"thread_created": phone_number in thread_map,
+					"response_created": phone_number in response_map
+				},
+				"errors": recent_errors
+			}
+			
+		except Exception as e:
+			log_debug("FAILED WhatsApp real flow test", {"error": str(e), "traceback": traceback.format_exc()})
+			return {
+				"status": "error",
+				"message": f"WhatsApp real flow test failed: {str(e)}",
+				"error_details": {
+					"error": str(e),
+					"type": type(e).__name__,
+					"traceback": traceback.format_exc()
+				}
+			}
+
 	# Run all tests
 	log_debug(f"Starting AI tests with phone number: {phone_number}")
 	
@@ -208,6 +341,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 	results["tests"]["whatsapp_message_processing"] = safe_test("WhatsApp Message Processing", test_whatsapp_message_processing)
 	results["tests"]["ai_agent_execution"] = safe_test("AI Agent Execution", test_ai_agent_execution)
 	results["tests"]["whatsapp_autoreply_settings"] = safe_test("WhatsApp Autoreply Settings", test_whatsapp_autoreply_settings)
+	results["tests"]["whatsapp_real_flow"] = safe_test("WhatsApp Real Flow", test_whatsapp_real_flow)
 	
 	log_debug("All AI tests completed")
 	return results

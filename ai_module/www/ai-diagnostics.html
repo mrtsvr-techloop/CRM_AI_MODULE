@@ -350,6 +350,7 @@
                 <div>
                     <button onclick="runDiagnostics()">🔍 Run Diagnostics</button>
                     <button onclick="resetSessions()" class="danger">🔄 Reset Sessions</button>
+                    <button onclick="deleteAllAIFiles()" class="danger">🗑️ Delete All AI Files</button>
                 </div>
             </div>
             
@@ -802,6 +803,32 @@
                 .catch(error => {
                     console.error('Reset sessions error:', error);
                     alert('Error resetting sessions: ' + error.message);
+                });
+        }
+        
+        function deleteAllAIFiles() {
+            if (!confirm('⚠️ DANGER: This will DELETE ALL AI files from private/files!\n\nThis includes:\n- ai_whatsapp_sessions.json\n- ai_whatsapp_threads.json\n- ai_whatsapp_lang.json\n- ai_response_map.json\n- ai_whatsapp_messages.json\n\nAre you absolutely sure?')) {
+                return;
+            }
+            
+            fetch('/api/method/ai_module.api.delete_all_ai_files', {
+                method: 'POST',
+                headers: {
+                    'X-Frappe-CSRF-Token': frappe.csrf_token
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.message) {
+                        alert('✅ AI files deleted successfully!\n\nDeleted files: ' + data.message.deleted_files.join(', '));
+                        runDiagnostics();
+                    } else {
+                        alert('Files deletion: ' + JSON.stringify(data));
+                    }
+                })
+                .catch(error => {
+                    console.error('Delete files error:', error);
+                    alert('Error deleting files: ' + error.message);
                 });
         }
         

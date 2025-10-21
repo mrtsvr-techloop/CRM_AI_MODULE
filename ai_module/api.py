@@ -553,3 +553,54 @@ def reset_sessions():
 			"success": False,
 			"error": str(e)
 		}
+
+
+@frappe.whitelist()
+def delete_all_ai_files():
+	"""Delete ALL AI files from private/files directory."""
+	try:
+		import os
+		
+		# List of AI files to delete
+		ai_files = [
+			"ai_whatsapp_sessions.json",
+			"ai_whatsapp_threads.json", 
+			"ai_whatsapp_lang.json",
+			"ai_response_map.json",
+			"ai_whatsapp_messages.json"
+		]
+		
+		deleted_files = []
+		failed_files = []
+		
+		# Get private files directory
+		private_files_path = frappe.get_site_path("private", "files")
+		
+		for filename in ai_files:
+			file_path = os.path.join(private_files_path, filename)
+			
+			try:
+				if os.path.exists(file_path):
+					os.remove(file_path)
+					deleted_files.append(filename)
+					frappe.logger("ai_module.debug").info(f"Deleted AI file: {filename}")
+				else:
+					frappe.logger("ai_module.debug").info(f"AI file not found: {filename}")
+			except Exception as e:
+				failed_files.append(f"{filename}: {str(e)}")
+				frappe.logger("ai_module.debug").error(f"Failed to delete {filename}: {str(e)}")
+		
+		return {
+			"success": True,
+			"message": {
+				"deleted_files": deleted_files,
+				"failed_files": failed_files,
+				"total_deleted": len(deleted_files),
+				"total_failed": len(failed_files)
+			}
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e)
+		}

@@ -215,9 +215,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				"type": "Incoming",
 				"from": phone_number,
 				"message": "ciao - test real flow",
-				"content_type": "text",
-				"reference_doctype": None,
-				"reference_name": None
+				"content_type": "text"
 			})
 			
 			# Save the document - this should trigger the hook
@@ -225,8 +223,9 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 			log_debug("WhatsApp Message created successfully", {
 				"doc_name": whatsapp_doc.name,
 				"type": whatsapp_doc.type,
-				"from": whatsapp_doc.from_number or whatsapp_doc.from_field,
-				"message": whatsapp_doc.message
+				"from": whatsapp_doc.from_field,
+				"message": whatsapp_doc.message,
+				"creation": str(whatsapp_doc.creation)
 			})
 			
 			# Step 2: Check if AI hook was triggered
@@ -308,7 +307,7 @@ def run_ai_tests(phone_number: str = "+393926012793") -> Dict[str, Any]:
 				"whatsapp_doc": {
 					"name": whatsapp_doc.name,
 					"type": whatsapp_doc.type,
-					"from": whatsapp_doc.from_number or whatsapp_doc.from_field,
+					"from": whatsapp_doc.from_field,
 					"message": whatsapp_doc.message,
 					"creation": str(whatsapp_doc.creation)
 				},

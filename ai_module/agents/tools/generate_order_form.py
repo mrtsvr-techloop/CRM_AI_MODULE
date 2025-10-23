@@ -16,7 +16,15 @@ SCHEMA: Dict[str, Any] = {
             "properties": {
                 "customer_name": {
                     "type": "string",
-                    "description": "Customer's full name (extracted from conversation)"
+                    "description": "Customer's first name (extracted from conversation)"
+                },
+                "customer_surname": {
+                    "type": "string",
+                    "description": "Customer's last name/surname (extracted from conversation)"
+                },
+                "company_name": {
+                    "type": "string",
+                    "description": "Customer's company name (optional, extracted from conversation)"
                 },
                 "products": {
                     "type": "array",
@@ -58,7 +66,9 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     The form is pre-populated with the order details extracted from the conversation.
     
     Args:
-        customer_name: Customer's full name (extracted from conversation, optional)
+        customer_name: Customer's first name (extracted from conversation, optional)
+        customer_surname: Customer's last name/surname (extracted from conversation, optional)
+        company_name: Customer's company name (optional, extracted from conversation)
         phone_from: Customer's phone number (automatically injected by security system)
         products: Array of products with product_id and product_quantity
         delivery_address: Customer's delivery address (optional)
@@ -90,6 +100,8 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         
         # Get customer_name from kwargs (should be extracted by AI from conversation)
         customer_name = kwargs.get("customer_name", "")
+        customer_surname = kwargs.get("customer_surname", "")
+        company_name = kwargs.get("company_name", "")
         
         # Validate required parameters
         required_params = ["products"]
@@ -128,7 +140,9 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             
             order_data = {
                 "customer_name": customer_name,
+                "customer_surname": customer_surname,
                 "phone_number": phone_number,
+                "company_name": company_name,
                 "products": products,
                 "delivery_address": kwargs.get("delivery_address", ""),
                 "notes": kwargs.get("notes", "")
@@ -155,8 +169,9 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                 form_url = f"/order_confirmation?order_id={temp_order_id}"
             
             # Create order summary
+            customer_full_name = f"{customer_name} {customer_surname}".strip() if customer_name or customer_surname else "Cliente"
             order_summary = {
-                "customer_name": customer_name,
+                "customer_name": customer_full_name,
                 "products_count": len(products),
                 "temp_order_id": temp_order_id
             }
@@ -164,7 +179,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
             return {
                 "success": True,
                 "form_url": form_url,
-                "message": f"Form di conferma ordine generato per {customer_name}",
+                "message": f"Form di conferma ordine generato per {customer_full_name}",
                 "order_summary": order_summary
             }
             

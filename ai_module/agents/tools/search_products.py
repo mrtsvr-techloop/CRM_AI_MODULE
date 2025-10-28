@@ -7,10 +7,13 @@ SCHEMA: Dict[str, Any] = {
 	"function": {
 		"name": "search_products",
 		"description": (
-			"Search CRM Products by tag, price, or name. "
+			"Search CRM Products by tag, price, or name to get product_code (ID) for order forms. "
+			"CRITICAL: Use this tool BEFORE generate_order_confirmation_form to get product_code for each product. "
+			"The product_code returned is required for the products array in generate_order_confirmation_form. "
+			"Example: search_products(filter_value='tiramisù') returns product with product_code='CRMPROD-00001'. "
 			"The AI can automatically detect the filter type or specify it explicitly. "
 			"If no filter_value is provided, returns ALL active products. "
-			"Returns product name, price, and tags (called 'Etichette' in Italian). "
+			"Returns product_code (ID), name, price, and tags (called 'Etichette' in Italian). "
 			"Only returns active products (not disabled)."
 		),
 		"parameters": {

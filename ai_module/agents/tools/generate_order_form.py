@@ -7,9 +7,13 @@ SCHEMA: Dict[str, Any] = {
     "function": {
         "name": "generate_order_confirmation_form",
         "description": (
-            "Generate a WhatsApp order confirmation form link with pre-filled data. "
+            "Generate a WhatsApp order confirmation form link with pre-filled customer and order data. "
+            "CRITICAL: Before calling this tool, you MUST use search_products to get product_code for each product. "
+            "The products parameter requires product_id (which is the product_code from search_products), NOT product names. "
+            "Example: search_products(filter_value='tiramisù') returns product_code='CRMPROD-00001', then use "
+            "products=[{product_id: 'CRMPROD-00001', product_quantity: 2}]. "
             "This creates a secure FCRM TEMP ORDINE record that customers can access to confirm their order. "
-            "The form is pre-populated with the order details extracted from the conversation."
+            "When the customer submits the form, a CRM Lead is created AUTOMATICALLY - do NOT use new_client_lead tool."
         ),
         "parameters": {
             "type": "object",
@@ -33,17 +37,17 @@ SCHEMA: Dict[str, Any] = {
                         "properties": {
                             "product_id": {
                                 "type": "string",
-                                "description": "CRM Product ID"
+                                "description": "CRM Product code/ID obtained from search_products tool (e.g., 'CRMPROD-00001'). NEVER use product name here."
                             },
                             "product_quantity": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "description": "Quantity of this product"
+                                "description": "Quantity of this product requested by the customer"
                             }
                         },
                         "required": ["product_id", "product_quantity"]
                     },
-                    "description": "Array of products with their IDs and quantities"
+                    "description": "Array of products with their CRM Product codes (from search_products) and quantities. Must contain at least one product."
                 },
                 "delivery_address": {
                     "type": "string",

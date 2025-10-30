@@ -116,9 +116,9 @@
 		{
 			"fieldname": "instructions",
 			"label": "Instructions",
-			"fieldtype": "Text Editor",
+			"fieldtype": "Long Text",
 			"reqd": 0,
-			"description": "System prompt used for the OpenAI Assistant"
+			"description": "System prompt used for the OpenAI Assistant (plain text, no HTML)"
 		},
 		{
 			"fieldname": "section_whatsapp",

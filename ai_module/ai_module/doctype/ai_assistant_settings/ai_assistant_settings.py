@@ -57,9 +57,17 @@ class AIAssistantSettings(Document):
 		vector_store_id = create_vector_store_with_file(file_path, store_name)
 		
 		# Create Assistant with file_search
-		# Clean HTML tags from instructions using frappe utility
+		# Instructions are now plain text (Long Text field), no HTML cleaning needed
 		instructions_raw = self.instructions or DEFAULT_INSTRUCTIONS
-		instructions = frappe.utils.strip_html_tags(instructions_raw).strip()
+		instructions = instructions_raw.strip()
+		
+		# Add instruction to hide PDF citations in responses
+		instructions += (
+			"\n\nIMPORTANT: When you find information in the knowledge base (PDF), "
+			"provide the answer naturally without showing citation markers like 【】 or footnotes. "
+			"Just give the information directly."
+		)
+		
 		model = self.model or "gpt-4o-mini"
 		assistant_id = create_assistant_with_vector_store(vector_store_id, instructions, model)
 		

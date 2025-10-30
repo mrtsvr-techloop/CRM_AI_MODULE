@@ -58,10 +58,11 @@ def _resolve_agent(agent_or_name: Union[str, Agent], model: Optional[str]) -> Ag
 
 
 def _run_via_responses_api(input_text: str, session_id: Optional[str]) -> Dict[str, Any]:
-	"""Execute agent via modern OpenAI Responses API.
+	"""Execute agent via hybrid system: Responses API or Assistants API with PDF context.
 	
-	Uses the Responses API with previous_response_id for conversation state.
-	No deprecated Assistants API - everything is handled in responses.create.
+	Routes to appropriate API based on PDF context configuration:
+	- If PDF context enabled: Uses Assistants API with file_search for RAG
+	- Otherwise: Uses modern Responses API with previous_response_id
 	
 	Args:
 		input_text: The user message to send to the AI
@@ -70,16 +71,34 @@ def _run_via_responses_api(input_text: str, session_id: Optional[str]) -> Dict[s
 	Returns:
 		Dict with final_output, thread_id (session), and model
 	"""
-	from .threads import run_with_responses_api
+	# Check if PDF context is enabled
+	try:
+		settings = frappe.get_single("AI Assistant Settings")
+		use_pdf_context = settings.enable_pdf_context and settings.assistant_id
+	except Exception:
+		use_pdf_context = False
 	
-	# Log session start
-	_log().info(f"Running agent session={session_id or '<new>'}")
-	
-	# Execute via OpenAI Responses API
-	return run_with_responses_api(
-		message=input_text,
-		session_id=session_id
-	)
+	if use_pdf_context:
+		# Use Assistants API with file_search for PDF-based RAG
+		from .assistants_api import run_with_assistants_api
+		
+		_log().info(f"Running with Assistants API (PDF context) session={session_id or '<new>'}")
+		
+		return run_with_assistants_api(
+			message=input_text,
+			assistant_id=settings.assistant_id,
+			session_id=session_id
+		)
+	else:
+		# Use modern Responses API (default)
+		from .threads import run_with_responses_api
+		
+		_log().info(f"Running with Responses API session={session_id or '<new>'}")
+		
+		return run_with_responses_api(
+			message=input_text,
+			session_id=session_id
+		)
 
 
 def run_agent(

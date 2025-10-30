@@ -13,6 +13,83 @@ from ai_module.agents.config import get_environment
 
 
 class AIAssistantSettings(Document):
+	def before_save(self):
+		"""Process PDF if changed and create/update Vector Store."""
+		if self.enable_pdf_context and self.has_value_changed('knowledge_pdf'):
+			if self.knowledge_pdf:
+				self._setup_pdf_context()
+			else:
+				self._cleanup_pdf_context()
+		elif not self.enable_pdf_context and (self.vector_store_id or self.assistant_id):
+			# PDF context disabled, cleanup
+			self._cleanup_pdf_context()
+
+	def _setup_pdf_context(self):
+		"""Setup Vector Store and Assistant for PDF context."""
+		from ai_module.agents.assistants_api import (
+			create_vector_store_with_file,
+			create_assistant_with_vector_store,
+			delete_vector_store,
+			delete_assistant
+		)
+		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+		import os
+		
+		# Validate PDF file
+		file_path = frappe.get_site_path('public', self.knowledge_pdf.lstrip('/'))
+		
+		if not os.path.exists(file_path):
+			frappe.throw(f"PDF file not found: {self.knowledge_pdf}")
+		
+		# Check file size (max 32MB)
+		file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+		if file_size_mb > 32:
+			frappe.throw(f"PDF too large: {file_size_mb:.1f}MB (max 32MB)")
+		
+		# Delete old resources if they exist
+		if self.vector_store_id:
+			delete_vector_store(self.vector_store_id)
+		if self.assistant_id:
+			delete_assistant(self.assistant_id)
+		
+		# Create new Vector Store with PDF
+		store_name = f"KB_{frappe.utils.now()}"
+		vector_store_id = create_vector_store_with_file(file_path, store_name)
+		
+		# Create Assistant with file_search
+		instructions = self.instructions or DEFAULT_INSTRUCTIONS
+		model = self.model or "gpt-4o-mini"
+		assistant_id = create_assistant_with_vector_store(vector_store_id, instructions, model)
+		
+		# Save IDs
+		self.vector_store_id = vector_store_id
+		self.assistant_id = assistant_id
+		self.pdf_uploaded_at = frappe.utils.now()
+		self.pdf_file_size_mb = round(file_size_mb, 2)
+		
+		frappe.msgprint(
+			f"PDF Knowledge Base configured successfully!<br>"
+			f"Vector Store: {vector_store_id}<br>"
+			f"Assistant: {assistant_id}",
+			title="Knowledge Base Ready",
+			indicator="green"
+		)
+
+	def _cleanup_pdf_context(self):
+		"""Cleanup Vector Store and Assistant when PDF is removed."""
+		from ai_module.agents.assistants_api import delete_vector_store, delete_assistant
+		
+		if self.vector_store_id:
+			delete_vector_store(self.vector_store_id)
+			self.vector_store_id = None
+		
+		if self.assistant_id:
+			delete_assistant(self.assistant_id)
+			self.assistant_id = None
+		
+		self.pdf_uploaded_at = None
+		self.pdf_file_size_mb = None
+
 	def _populate_readonly_from_env(self):
 		"""Populate display fields from environment unless user chose to use DocType.
 		When `use_settings_override` is enabled, fields remain as user-entered and editable.
@@ -34,9 +111,9 @@ class AIAssistantSettings(Document):
 		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()
 		# Do not enforce API key at save time; runtime will skip actions if missing
-		# If override is OFF, ensure assistant_id is cleared so it never persists
+		# Note: assistant_id is now used for PDF context (Assistants API with file_search)
+		# It's managed by _setup_pdf_context and should not be cleared here
 		if not getattr(self, "use_settings_override", 0):
-			self.assistant_id = ""
 			# When override is OFF, set default values for WhatsApp orchestration
 			# These are used as defaults when no environment variable is set
 			# Note: These defaults are only for display; actual behavior is controlled by environment
@@ -69,6 +146,11 @@ class AIAssistantSettings(Document):
 			return
 		from ai_module.agents.assistant_update import upsert_assistant
 		upsert_assistant(force=True)
+
+	def on_trash(self):
+		"""Delete OpenAI resources when settings are deleted."""
+		if self.enable_pdf_context:
+			self._cleanup_pdf_context()
 
 
 @frappe.whitelist(methods=["GET", "POST"])

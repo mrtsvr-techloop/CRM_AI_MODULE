@@ -605,3 +605,54 @@ def delete_all_ai_files():
 			"success": False,
 			"error": str(e)
 		}
+
+
+@frappe.whitelist()
+def test_pdf_context(test_message: str = "Quali sono i valori aziendali?") -> Dict[str, Any]:
+	"""Test PDF context system with a sample question.
+	
+	Args:
+		test_message: Question to ask about the PDF content
+	
+	Returns:
+		Test results with response and diagnostics
+	"""
+	settings = frappe.get_single("AI Assistant Settings")
+	
+	if not settings.enable_pdf_context:
+		return {
+			"success": False,
+			"error": "PDF context not enabled in AI Assistant Settings"
+		}
+	
+	if not settings.assistant_id:
+		return {
+			"success": False,
+			"error": "No Assistant ID configured. Upload a PDF first."
+		}
+	
+	try:
+		from ai_module.agents.assistants_api import run_with_assistants_api
+		
+		result = run_with_assistants_api(
+			message=test_message,
+			assistant_id=settings.assistant_id,
+			session_id=None  # New conversation for testing
+		)
+		
+		return {
+			"success": True,
+			"question": test_message,
+			"answer": result["final_output"],
+			"thread_id": result["thread_id"],
+			"model": result["model"],
+			"vector_store_id": settings.vector_store_id,
+			"pdf_file_size_mb": settings.pdf_file_size_mb
+		}
+		
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e),
+			"traceback": frappe.get_traceback()
+		}

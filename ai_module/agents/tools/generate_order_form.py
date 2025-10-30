@@ -132,6 +132,43 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                     "error": f"Product {i+1} missing product_id or product_quantity"
                 }
         
+        # CRITICAL: Validate that all product_id values exist in the database
+        # This forces the AI to use search_products to get real product codes
+        try:
+            import frappe
+            invalid_products = []
+            
+            for i, product in enumerate(products):
+                product_id = product.get("product_id")
+                
+                # Check if product exists in CRM Product
+                exists = frappe.db.exists("CRM Product", product_id)
+                if not exists:
+                    invalid_products.append({
+                        "index": i + 1,
+                        "product_id": product_id
+                    })
+            
+            if invalid_products:
+                error_details = ", ".join([
+                    f"Product {p['index']} (ID: {p['product_id']})" 
+                    for p in invalid_products
+                ])
+                return {
+                    "success": False,
+                    "error": (
+                        f"Invalid product_id detected: {error_details}. "
+                        f"CRITICAL: You MUST use the search_products tool to get valid product codes from the database. "
+                        f"NEVER invent or guess product IDs. "
+                        f"Example: search_products(filter_value='product_name') will return valid product_code values."
+                    )
+                }
+        except Exception as validation_error:
+            return {
+                "success": False,
+                "error": f"Error validating products: {str(validation_error)}"
+            }
+        
         # Create FCRM TEMP ORDINE record
         try:
             import frappe

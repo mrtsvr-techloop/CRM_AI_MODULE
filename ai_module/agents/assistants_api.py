@@ -173,10 +173,22 @@ def run_with_assistants_api(
 	)
 	
 	# Run assistant
-	run = client.beta.threads.runs.create(
-		thread_id=thread_id,
-		assistant_id=assistant_id
-	)
+	try:
+		run = client.beta.threads.runs.create(
+			thread_id=thread_id,
+			assistant_id=assistant_id
+		)
+	except Exception as e:
+		error_msg = str(e)
+		_log().error(f"Failed to create run: {error_msg}")
+		
+		# If assistant doesn't exist, provide helpful error
+		if "assistant" in error_msg.lower() or "not found" in error_msg.lower():
+			raise Exception(
+				f"Assistant {assistant_id} not found. Please re-upload the PDF in AI Assistant Settings "
+				f"to recreate the Assistant with the latest configuration."
+			)
+		raise
 	
 	# Poll for completion and handle tool calls
 	start = time.time()
@@ -194,7 +206,22 @@ def run_with_assistants_api(
 			_handle_tool_calls(client, thread_id, run, session_id)
 			# Continue polling after submitting tool outputs
 		elif run.status in ["failed", "cancelled", "expired"]:
-			raise Exception(f"Run {run.status}: {run.last_error}")
+			error_detail = getattr(run, 'last_error', None)
+			error_msg = f"Run {run.status}"
+			
+			if error_detail:
+				error_code = getattr(error_detail, 'code', 'unknown')
+				error_message = getattr(error_detail, 'message', 'Unknown error')
+				error_msg += f": {error_code} - {error_message}"
+				
+				# Provide helpful message for common errors
+				if error_code == 'server_error':
+					error_msg += "\n\nThis may be a temporary OpenAI issue. Please try again in a moment."
+				elif 'rate_limit' in error_code:
+					error_msg += "\n\nOpenAI rate limit reached. Please wait a moment and try again."
+			
+			_log().error(error_msg)
+			raise Exception(error_msg)
 		
 		time.sleep(1)
 	else:
@@ -312,6 +339,7 @@ def _get_or_create_thread(client: OpenAI, session_id: Optional[str]) -> str:
 	"""Get existing thread or create new one for session.
 	
 	Maps session_id to OpenAI thread_id using local file storage.
+	Validates that thread still exists on OpenAI before reusing.
 	"""
 	if not session_id:
 		# No session, create new thread
@@ -324,8 +352,18 @@ def _get_or_create_thread(client: OpenAI, session_id: Optional[str]) -> str:
 	
 	if session_id in thread_map:
 		thread_id = thread_map[session_id]
-		_log().debug(f"Using existing thread {thread_id} for session {session_id}")
-		return thread_id
+		_log().debug(f"Found cached thread {thread_id} for session {session_id}")
+		
+		# Verify thread still exists on OpenAI
+		try:
+			client.beta.threads.retrieve(thread_id)
+			_log().debug(f"Thread {thread_id} verified on OpenAI")
+			return thread_id
+		except Exception as e:
+			_log().warning(f"Cached thread {thread_id} not found on OpenAI: {e}. Creating new thread.")
+			# Remove invalid thread from cache
+			del thread_map[session_id]
+			_save_json_file(thread_map_path, thread_map)
 	
 	# Create new thread and save mapping
 	thread = client.beta.threads.create()

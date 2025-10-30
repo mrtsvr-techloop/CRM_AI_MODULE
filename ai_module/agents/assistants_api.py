@@ -264,7 +264,7 @@ def _handle_tool_calls(client: OpenAI, thread_id: str, run: Any, session_id: Opt
 		session_id: Session ID to inject phone_from
 	"""
 	from .tool_registry import get_tool_impl
-	from .security import sanitize_and_inject_phone
+	from .threads import _sanitize_tool_args
 	
 	if not run.required_action or not run.required_action.submit_tool_outputs:
 		return
@@ -281,7 +281,7 @@ def _handle_tool_calls(client: OpenAI, thread_id: str, run: Any, session_id: Opt
 		try:
 			# Inject phone_from from session mapping (security)
 			if session_id:
-				arguments = sanitize_and_inject_phone(arguments, session_id)
+				arguments = _sanitize_tool_args(arguments, session_id)
 			
 			# Get tool implementation
 			tool_func = get_tool_impl(function_name)

@@ -9,6 +9,7 @@ import frappe
 from openai import OpenAI
 from typing import Dict, Any, Optional
 import time
+import json
 
 
 def _log():
@@ -72,7 +73,7 @@ def create_vector_store_with_file(file_path: str, store_name: str) -> str:
 
 
 def create_assistant_with_vector_store(vector_store_id: str, instructions: str, model: str) -> str:
-	"""Create an Assistant with file_search tool linked to Vector Store.
+	"""Create an Assistant with file_search tool AND function calling tools linked to Vector Store.
 	
 	Args:
 		vector_store_id: ID of the vector store to attach
@@ -83,6 +84,7 @@ def create_assistant_with_vector_store(vector_store_id: str, instructions: str, 
 		Assistant ID
 	"""
 	from .config import apply_environment, get_environment
+	from .assistant_spec import get_assistant_tools
 	
 	apply_environment()
 	env = get_environment()
@@ -95,11 +97,27 @@ def create_assistant_with_vector_store(vector_store_id: str, instructions: str, 
 	
 	_log().info(f"Creating Assistant with file_search for Vector Store: {vector_store_id}")
 	
+	# Get all function calling tools from the system
+	function_tools = get_assistant_tools()
+	
+	# Build tools list: file_search + all function tools
+	tools = [{"type": "file_search"}]
+	
+	# Add function calling tools (convert from Responses API format to Assistants API format)
+	for tool in function_tools:
+		if tool.get("type") == "function":
+			tools.append({
+				"type": "function",
+				"function": tool["function"]
+			})
+	
+	_log().info(f"Creating Assistant with {len(tools)} tools (1 file_search + {len(function_tools)} functions)")
+	
 	assistant = client.beta.assistants.create(
 		name="CRM Assistant with Knowledge Base",
 		instructions=instructions,
 		model=model,
-		tools=[{"type": "file_search"}],
+		tools=tools,
 		tool_resources={
 			"file_search": {
 				"vector_store_ids": [vector_store_id]
@@ -160,7 +178,7 @@ def run_with_assistants_api(
 		assistant_id=assistant_id
 	)
 	
-	# Poll for completion
+	# Poll for completion and handle tool calls
 	start = time.time()
 	while time.time() - start < timeout_s:
 		run = client.beta.threads.runs.retrieve(
@@ -170,6 +188,11 @@ def run_with_assistants_api(
 		
 		if run.status == "completed":
 			break
+		elif run.status == "requires_action":
+			# Assistant wants to call tools
+			_log().info(f"Assistant requires action: handling tool calls")
+			_handle_tool_calls(client, thread_id, run, session_id)
+			# Continue polling after submitting tool outputs
 		elif run.status in ["failed", "cancelled", "expired"]:
 			raise Exception(f"Run {run.status}: {run.last_error}")
 		
@@ -202,6 +225,87 @@ def run_with_assistants_api(
 		"model": run.model,
 		"api_type": "assistants"
 	}
+
+
+def _handle_tool_calls(client: OpenAI, thread_id: str, run: Any, session_id: Optional[str] = None) -> None:
+	"""Handle tool calls requested by the Assistant.
+	
+	Args:
+		client: OpenAI client
+		thread_id: Thread ID
+		run: Run object with requires_action status
+		session_id: Session ID to inject phone_from
+	"""
+	from .tool_registry import get_tool_impl
+	from .security import sanitize_and_inject_phone
+	
+	if not run.required_action or not run.required_action.submit_tool_outputs:
+		return
+	
+	tool_calls = run.required_action.submit_tool_outputs.tool_calls
+	tool_outputs = []
+	
+	for tool_call in tool_calls:
+		function_name = tool_call.function.name
+		arguments = json.loads(tool_call.function.arguments)
+		
+		_log().info(f"Executing tool: {function_name} with args: {arguments}")
+		
+		try:
+			# Inject phone_from from session mapping (security)
+			if session_id:
+				arguments = sanitize_and_inject_phone(arguments, session_id)
+			
+			# Get tool implementation
+			tool_func = get_tool_impl(function_name)
+			
+			if not tool_func:
+				output = {"error": f"Tool {function_name} not found"}
+			else:
+				# Execute tool
+				result = tool_func(**arguments)
+				output = result if isinstance(result, dict) else {"result": result}
+		
+		except Exception as e:
+			_log().error(f"Tool execution error: {function_name} - {str(e)}")
+			output = {"error": str(e)}
+		
+		# Serialize output, handling datetime and other non-JSON types
+		try:
+			output_json = json.dumps(output, default=_json_serializer)
+		except Exception as e:
+			_log().error(f"JSON serialization error: {str(e)}")
+			output_json = json.dumps({"error": "Serialization failed", "message": str(e)})
+		
+		tool_outputs.append({
+			"tool_call_id": tool_call.id,
+			"output": output_json
+		})
+		
+		_log().info(f"Tool {function_name} output: {output}")
+	
+	# Submit all tool outputs back to the Assistant
+	client.beta.threads.runs.submit_tool_outputs(
+		thread_id=thread_id,
+		run_id=run.id,
+		tool_outputs=tool_outputs
+	)
+	
+	_log().info(f"Submitted {len(tool_outputs)} tool outputs")
+
+
+def _json_serializer(obj):
+	"""JSON serializer for objects not serializable by default json code."""
+	from datetime import datetime, date
+	
+	if isinstance(obj, (datetime, date)):
+		return obj.isoformat()
+	
+	# Try to convert to string for other types
+	try:
+		return str(obj)
+	except Exception:
+		return None
 
 
 def _get_or_create_thread(client: OpenAI, session_id: Optional[str]) -> str:

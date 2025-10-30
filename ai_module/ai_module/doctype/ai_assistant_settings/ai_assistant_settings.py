@@ -57,7 +57,10 @@ class AIAssistantSettings(Document):
 		vector_store_id = create_vector_store_with_file(file_path, store_name)
 		
 		# Create Assistant with file_search
-		instructions = self.instructions or DEFAULT_INSTRUCTIONS
+		# Clean HTML tags from instructions
+		from ai_module.agents.config import clean_html
+		instructions_raw = self.instructions or DEFAULT_INSTRUCTIONS
+		instructions = clean_html(instructions_raw).strip()
 		model = self.model or "gpt-4o-mini"
 		assistant_id = create_assistant_with_vector_store(vector_store_id, instructions, model)
 		

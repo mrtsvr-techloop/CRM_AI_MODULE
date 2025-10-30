@@ -17,6 +17,21 @@ def _log():
 	return get_resilient_logger("ai_module.assistants_api")
 
 
+def _remove_pdf_citations(text: str) -> str:
+	"""Remove PDF citation markers from text (e.g. 【12:0†file.pdf】).
+	
+	Args:
+		text: Text potentially containing citation markers
+	
+	Returns:
+		Text with all citation markers removed
+	"""
+	import re
+	# Remove all text between 【 and 】 (including the brackets)
+	cleaned_text = re.sub(r'【[^】]*】', '', text)
+	return cleaned_text
+
+
 def create_vector_store_with_file(file_path: str, store_name: str) -> str:
 	"""Create a Vector Store and upload PDF file.
 	
@@ -243,6 +258,9 @@ def run_with_assistants_api(
 		response_text = message_content.text.value
 	else:
 		response_text = str(message_content)
+	
+	# Remove PDF citations (e.g. 【12:0†file.pdf】)
+	response_text = _remove_pdf_citations(response_text)
 	
 	_log().info(f"AI response (Assistants API): text_len={len(response_text)} thread={thread_id}")
 	

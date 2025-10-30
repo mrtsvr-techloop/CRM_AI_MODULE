@@ -58,16 +58,8 @@ class AIAssistantSettings(Document):
 		
 		# Create Assistant with file_search
 		# Instructions are now plain text (Long Text field), no HTML cleaning needed
-		instructions_raw = self.instructions or DEFAULT_INSTRUCTIONS
-		instructions = instructions_raw.strip()
-		
-		# Add instruction to hide PDF citations in responses
-		instructions += (
-			"\n\nIMPORTANT: When you find information in the knowledge base (PDF), "
-			"provide the answer naturally without showing citation markers like 【】 or footnotes. "
-			"Just give the information directly."
-		)
-		
+		# Note: PDF citations (【】) are automatically removed by the response filter
+		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip()
 		model = self.model or "gpt-4o-mini"
 		assistant_id = create_assistant_with_vector_store(vector_store_id, instructions, model)
 		

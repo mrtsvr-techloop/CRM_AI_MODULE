@@ -332,8 +332,88 @@ def _get_queue_config() -> Tuple[str, int]:
 	return queue_name, timeout
 
 
+def _check_workers_available() -> bool:
+	"""Check if background workers are available to process jobs.
+	
+	Returns True if workers are likely available, False otherwise.
+	This is a best-effort check - it's not 100% reliable but helps
+	avoid putting jobs in a queue that will never be processed.
+	"""
+	try:
+		# Check if Redis is configured (required for job queue)
+		import frappe
+		redis_enabled = frappe.conf.get("redis_queue") or frappe.conf.get("redis_cache")
+		if not redis_enabled:
+			# No Redis means no queue processing possible
+			return False
+		
+		# Try to check if there are active workers
+		# This is a heuristic - check if jobs are being processed
+		try:
+			from frappe.utils import now_datetime, add_to_date
+			cutoff = add_to_date(now_datetime(), minutes=-5)
+			
+			# Check if any jobs were completed recently (indicating workers are active)
+			recent_completed = frappe.get_all("Scheduled Job Log",
+				filters={
+					"status": "Completed",
+					"creation": [">", cutoff]
+				},
+				limit=1
+			)
+			
+			if recent_completed:
+				return True  # Workers appear to be active
+			
+			# If no recent completed jobs, check if there are stuck jobs
+			# If jobs are stuck, workers might not be running
+			stuck = frappe.get_all("Scheduled Job Log",
+				filters={
+					"status": "Queued",
+					"creation": ["<", cutoff]
+				},
+				limit=1
+			)
+			
+			if stuck:
+				return False  # Jobs are stuck, workers not processing
+			
+			# CRITICAL: If Redis is configured but no recent activity,
+			# assume workers are NOT available to avoid jobs getting stuck
+			# This is safer than assuming workers exist
+			_log().warning(
+				"Redis configured but no recent job activity detected. "
+				"Assuming workers not available - will use inline processing."
+			)
+			return False  # No recent activity = assume no workers
+			
+		except Exception as e:
+			# If we can't check, assume workers NOT available (safer default)
+			_log().warning(f"Could not check worker status: {e}. Assuming no workers.")
+			return False
+			
+	except Exception:
+		# If Redis check fails, assume no workers
+		return False
+
+
 def _enqueue_or_process(payload: Dict[str, Any], doc_name: str) -> None:
-	"""Enqueue message processing or fall back to inline processing."""
+	"""Enqueue message processing or fall back to inline processing.
+	
+	If workers are not available, automatically falls back to inline processing
+	to ensure messages are always processed.
+	"""
+	# Check if workers are available before enqueueing
+	workers_available = _check_workers_available()
+	
+	if not workers_available:
+		_log().warning(
+			f"No workers detected - processing inline instead of queue. "
+			f"This ensures messages are processed even without workers."
+		)
+		process_incoming_whatsapp_message(payload)
+		return
+	
 	queue_name, timeout = _get_queue_config()
 	
 	try:
@@ -347,6 +427,7 @@ def _enqueue_or_process(payload: Dict[str, Any], doc_name: str) -> None:
 			timeout=timeout,
 			enqueue_after_commit=True,
 		)
+		_log().info(f"Job enqueued successfully: {doc_name}")
 	except Exception as exc:
 		_log().exception(f"Enqueue failed, falling back to inline: {exc}")
 		process_incoming_whatsapp_message(payload)

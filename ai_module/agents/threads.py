@@ -40,21 +40,61 @@ def _get_map_path(filename: str) -> str:
 
 def _load_json_map(filename: str) -> Dict[str, Any]:
 	"""Load a JSON map from file. Returns empty dict if file doesn't exist."""
-	path = _get_map_path(filename)
-	if not os.path.exists(path):
+	try:
+		path = _get_map_path(filename)
+		if not os.path.exists(path):
+			return {}
+		
+		with open(path, "r", encoding="utf-8") as f:
+			data = f.read().strip()
+			if not data:
+				return {}
+			return json.loads(data)
+	except Exception as e:
+		_log().error(f"Failed to load JSON map {filename}: {e}")
+		# Try fallback from temp location
+		try:
+			import tempfile
+			temp_dir = tempfile.gettempdir()
+			temp_path = os.path.join(temp_dir, f"ai_module_{filename}")
+			if os.path.exists(temp_path):
+				with open(temp_path, "r", encoding="utf-8") as f:
+					data = f.read().strip()
+					if not data:
+						return {}
+					return json.loads(data)
+		except Exception as temp_e:
+			_log().debug(f"Fallback load also failed for {filename}: {temp_e}")
 		return {}
-	
-	with open(path, "r", encoding="utf-8") as f:
-		data = f.read().strip()
-		return json.loads(data) if data else {}
 
 
 def _save_json_map(filename: str, mapping: Dict[str, Any]) -> None:
-	"""Save a JSON map to file."""
-	path = _get_map_path(filename)
-	os.makedirs(os.path.dirname(path), exist_ok=True)
-	with open(path, "w", encoding="utf-8") as f:
-		json.dump(mapping, f)
+	"""Save a JSON map to file. Logs errors but doesn't raise."""
+	try:
+		path = _get_map_path(filename)
+		# Ensure directory exists with proper permissions
+		dir_path = os.path.dirname(path)
+		os.makedirs(dir_path, mode=0o755, exist_ok=True)
+		
+		# Write file with proper permissions
+		with open(path, "w", encoding="utf-8") as f:
+			json.dump(mapping, f, indent=2)
+		
+		# Set file permissions
+		os.chmod(path, 0o644)
+		
+	except Exception as e:
+		_log().error(f"Failed to save JSON map {filename}: {e}")
+		# Fallback: try to save in a temporary location
+		try:
+			import tempfile
+			temp_dir = tempfile.gettempdir()
+			temp_path = os.path.join(temp_dir, f"ai_module_{filename}")
+			with open(temp_path, "w", encoding="utf-8") as f:
+				json.dump(mapping, f, indent=2)
+			_log().info(f"Saved {filename} to temporary location: {temp_path}")
+		except Exception as temp_e:
+			_log().error(f"Failed to save {filename} even to temp location: {temp_e}")
 
 
 def _ensure_thread_id(session_id: Optional[str]) -> str:

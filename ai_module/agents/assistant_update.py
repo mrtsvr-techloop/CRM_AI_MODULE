@@ -20,11 +20,12 @@ def _log():
 
 
 def get_current_instructions() -> str:
-	"""Get AI instructions/prompt from DocType or fallback to code.
+	"""Get AI instructions/prompt from DocType, environment, or fallback to code.
 	
 	Priority:
 	1. DocType AI Assistant Settings (if use_settings_override enabled)
-	2. Code-defined prompt from assistant_spec
+	2. Environment variables AI_INSTRUCTIONS or AI_ASSISTANT_INSTRUCTIONS (if exist)
+	3. Code-defined prompt from assistant_spec
 	
 	Returns:
 		Instruction text for the AI
@@ -33,6 +34,11 @@ def get_current_instructions() -> str:
 	instructions = get_settings_prompt_only()
 	if instructions:
 		return instructions
+	
+	# Try environment variables if they exist
+	env_spec = get_env_assistant_spec()
+	if env_spec and env_spec.get("instructions"):
+		return env_spec["instructions"]
 	
 	# Fallback to code-defined prompt
 	from .assistant_spec import get_instructions

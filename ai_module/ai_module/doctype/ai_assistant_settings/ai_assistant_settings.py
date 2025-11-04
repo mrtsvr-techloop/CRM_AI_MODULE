@@ -10,6 +10,7 @@ import frappe
 from frappe.model.document import Document
 
 from ai_module.agents.config import get_environment
+from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
 
 
 class AIAssistantSettings(Document):
@@ -115,6 +116,10 @@ class AIAssistantSettings(Document):
 		# If override is enabled but model is empty, set default fallback
 		if use_settings and not self.get("model"):
 			self.model = "gpt-4o-mini"
+		
+		# If override is enabled but instructions is empty, populate with default prompt
+		if use_settings and not self.get("instructions"):
+			self.instructions = DEFAULT_INSTRUCTIONS
 		
 		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()

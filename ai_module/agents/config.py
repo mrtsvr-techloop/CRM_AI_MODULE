@@ -109,6 +109,11 @@ def _get_settings_overrides() -> Dict[str, str]:
 		if value:
 			overrides[env_key] = value
 	
+	# Model fallback: if use_settings_override is enabled but model is empty, use default
+	if "AI_ASSISTANT_MODEL" not in overrides:
+		from .threads import DEFAULT_MODEL
+		overrides["AI_ASSISTANT_MODEL"] = DEFAULT_MODEL
+	
 	# WhatsApp orchestration settings (boolean flags)
 	bool_field_mapping = {
 		"AI_AUTOREPLY": "wa_enable_autoreply",

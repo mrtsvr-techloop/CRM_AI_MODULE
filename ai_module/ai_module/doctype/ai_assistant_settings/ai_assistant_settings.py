@@ -110,12 +110,18 @@ class AIAssistantSettings(Document):
 		# Removed fields are no longer populated
 
 	def validate(self):
+		use_settings = bool(getattr(self, "use_settings_override", 0))
+		
+		# If override is enabled but model is empty, set default fallback
+		if use_settings and not self.get("model"):
+			self.model = "gpt-4o-mini"
+		
 		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()
 		# Do not enforce API key at save time; runtime will skip actions if missing
 		# Note: assistant_id is now used for PDF context (Assistants API with file_search)
 		# It's managed by _setup_pdf_context and should not be cleared here
-		if not getattr(self, "use_settings_override", 0):
+		if not use_settings:
 			# When override is OFF, set default values for WhatsApp orchestration
 			# These are used as defaults when no environment variable is set
 			# Note: These defaults are only for display; actual behavior is controlled by environment

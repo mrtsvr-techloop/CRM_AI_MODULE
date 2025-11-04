@@ -1,6 +1,7 @@
 import frappe
 import json
 import os
+import threading
 import time
 from typing import Any, Dict, Optional, Tuple
 
@@ -19,6 +20,42 @@ THREAD_MAP_FILE = "ai_whatsapp_threads.json"
 LANG_MAP_FILE = "ai_whatsapp_lang.json"
 PROFILE_MAP_FILE = "ai_whatsapp_profile.json"
 HANDOFF_MAP_FILE = "ai_whatsapp_handoff.json"
+
+# Global thread-safe deduplication cache (shared across all functions)
+# This ensures that the same message_id is never processed twice, regardless of
+# whether it's processed inline, via queue, or through any other path
+_global_processed_message_ids = set()
+_global_message_id_locks = {}
+_global_locks_lock = threading.Lock()
+
+
+def _get_or_create_message_lock(message_id: str) -> threading.Lock:
+	"""Get or create a thread lock for a specific message_id."""
+	with _global_locks_lock:
+		if message_id not in _global_message_id_locks:
+			_global_message_id_locks[message_id] = threading.Lock()
+		return _global_message_id_locks[message_id]
+
+
+def _check_and_mark_message_processed(message_id: str, logger) -> bool:
+	"""Check if message_id was already processed and mark it as processing.
+	
+	Returns True if message should be processed (not already processed),
+	False if it should be skipped (already processed).
+	"""
+	if not message_id:
+		return True  # No message_id, can't deduplicate
+	
+	lock = _get_or_create_message_lock(message_id)
+	
+	with lock:
+		if message_id in _global_processed_message_ids:
+			logger.warning(f"Message ID {message_id} already processed, skipping duplicate")
+			return False
+		
+		_global_processed_message_ids.add(message_id)
+		logger.info(f"Marked message ID {message_id} as processing")
+		return True
 
 
 def _log():
@@ -402,6 +439,9 @@ def _enqueue_or_process(payload: Dict[str, Any], doc_name: str) -> None:
 	
 	If workers are not available, automatically falls back to inline processing
 	to ensure messages are always processed.
+	
+	NOTE: Deduplication is already handled in on_whatsapp_after_insert hook,
+	so this function should NOT check deduplication again.
 	"""
 	# Check if workers are available before enqueueing
 	workers_available = _check_workers_available()
@@ -428,7 +468,10 @@ def _enqueue_or_process(payload: Dict[str, Any], doc_name: str) -> None:
 			enqueue_after_commit=True,
 		)
 		_log().info(f"Job enqueued successfully: {doc_name}")
+		# DO NOT call process_incoming_whatsapp_message here - it will be called by the worker
 	except Exception as exc:
+		# Only fallback to inline if enqueue actually failed
+		# This prevents double processing
 		_log().exception(f"Enqueue failed, falling back to inline: {exc}")
 		process_incoming_whatsapp_message(payload)
 
@@ -452,6 +495,10 @@ def on_whatsapp_after_insert(doc, method=None):
 		# DEBUG: Log timestamp for debugging
 		import datetime
 		logger.info(f"AI HOOK TIMESTAMP: {datetime.datetime.now()}")
+		
+		# NOTE: Deduplication is handled in process_incoming_whatsapp_message,
+		# which is called both inline and via queue. This ensures messages are
+		# processed only once regardless of the execution path.
 		
 		apply_environment()
 		
@@ -634,6 +681,25 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		logger = get_resilient_logger("ai_module.whatsapp")
 		logger.info(f"PROCESS_INCOMING START: payload={payload}")
 		
+		# CRITICAL: Check if message has already been processed to prevent duplicate responses
+		# Use global deduplication cache (shared across inline, queue, and all paths)
+		message_id = payload.get("message_id")
+		doc_name = payload.get("name")
+		
+		if message_id:
+			# Use global deduplication function (prevents double processing from inline AND queue)
+			if not _check_and_mark_message_processed(message_id, logger):
+				logger.warning(f"Message ID {message_id} (doc={doc_name}) already processed, skipping duplicate processing")
+				return
+		
+		# Fallback: if no message_id, use doc.name for deduplication (less reliable)
+		if doc_name and not message_id:
+			# Use message_id "NO_ID_{doc_name}" for deduplication
+			fallback_id = f"NO_ID_{doc_name}"
+			if not _check_and_mark_message_processed(fallback_id, logger):
+				logger.warning(f"Message {doc_name} already processed (no message_id), skipping duplicate processing")
+				return
+		
 		# Ensure directories exist before processing
 		_ensure_directories()
 		
@@ -672,6 +738,16 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		# Handle auto-reply if enabled
 		should_autoreply = _should_autoreply()
 		logger.info(f"PROCESS_INCOMING CHECK: should_autoreply={should_autoreply}")
+		
+		# CRITICAL: Mark message as successfully processed AFTER AI processing
+		# This ensures we don't process it again even if autoreply fails
+		if doc_name:
+			try:
+				frappe.db.set_value("WhatsApp Message", doc_name, "ai_processed", 1, update_modified=False)
+				frappe.db.commit()
+				logger.info(f"Marked message {doc_name} as successfully processed")
+			except Exception as mark_error:
+				logger.warning(f"Could not mark message as processed: {mark_error}")
 		
 		if should_autoreply:
 			reply_text = ""

@@ -57,10 +57,10 @@ resp2 = client.responses.create(
 # ❌ SBAGLIATO
 # Iterazione 1: AI chiama tool
 resp1 = client.responses.create(
-    input=[{"role": "user", "content": [{"type": "input_text", "text": "Aggiorna il contatto"}]}],
+    input=[{"role": "user", "content": [{"type": "input_text", "text": "Crea lead"}]}],
     previous_response_id=prev_conversation_id
 )
-# → function_call(update_contact)
+# → function_call(new_client_lead)
 # Salvo: resp1.id
 
 # Iterazione 2: Fornisco tool result
@@ -74,22 +74,22 @@ resp2 = client.responses.create(
 # ✅ CORRETTO
 # Iterazione 1: AI chiama tool
 resp1 = client.responses.create(
-    input=[{"role": "user", "content": [{"type": "input_text", "text": "Aggiorna il contatto"}]}],
+    input=[{"role": "user", "content": [{"type": "input_text", "text": "Crea lead"}]}],
     previous_response_id=prev_conversation_id  # OK per continuità conversazione
 )
-# → function_call(update_contact)
+# → function_call(new_client_lead)
 
-# Eseguo tool → result = {"contact_id": "CONTACT-001"}
+# Eseguo tool → result = {"lead_id": "LEAD-001"}
 
 # Iterazione 2: Fornisco tool result
 resp2 = client.responses.create(
     input=[
-        {"role": "user", "content": [{"type": "input_text", "text": "Aggiorna il contatto"}]},
-        {"role": "user", "content": [{"type": "input_text", "text": f"Function update_contact returned: {result}"}]}
+        {"role": "user", "content": [{"type": "input_text", "text": "Crea lead"}]},
+        {"role": "user", "content": [{"type": "input_text", "text": f"Function new_client_lead returned: {result}"}]}
     ],
     previous_response_id=None  # ✅ NON uso resp1.id!
 )
-# → "Ho aggiornato il contatto CONTACT-001!"
+# → "Ho creato il lead LEAD-001!"
 ```
 
 ### **Regola 3: Tool Results Come User Messages**
@@ -98,10 +98,10 @@ I tool results devono essere formattati come messaggi utente normali:
 
 ```python
 # ✅ CORRETTO
-tool_result = {"contact_id": "CONTACT-001", "success": True}
+tool_result = {"lead_id": "LEAD-001", "success": True}
 input = [
-    {"role": "user", "content": [{"type": "input_text", "text": "Aggiorna il contatto"}]},
-    {"role": "user", "content": [{"type": "input_text", "text": f"Function update_contact returned: {json.dumps(tool_result)}"}]}
+    {"role": "user", "content": [{"type": "input_text", "text": "Crea lead"}]},
+    {"role": "user", "content": [{"type": "input_text", "text": f"Function new_client_lead returned: {json.dumps(tool_result)}"}]}
 ]
 ```
 

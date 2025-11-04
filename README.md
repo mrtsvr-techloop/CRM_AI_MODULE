@@ -377,8 +377,7 @@ bench --site your-site run-tests --app ai_module --module ai_module.tests.test_t
 ai_module/
 ├── agents/
 │   ├── tools/              # AI function calling tools
-│   │   ├── generate_order_form.py
-│   │   ├── search_products.py
+│   │   ├── new_client_lead.py
 │   │   └── update_contact.py
 │   ├── bootstrap.py        # System initialization
 │   ├── config.py           # Configuration management

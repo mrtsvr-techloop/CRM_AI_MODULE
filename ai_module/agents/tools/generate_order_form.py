@@ -13,7 +13,7 @@ SCHEMA: Dict[str, Any] = {
             "Example: search_products(filter_value='tiramisù') returns product_code='CRMPROD-00001', then use "
             "products=[{product_id: 'CRMPROD-00001', product_quantity: 2}]. "
             "This creates a secure FCRM TEMP ORDINE record that customers can access to confirm their order. "
-            "When the customer submits the form, a CRM Lead is created AUTOMATICALLY - do NOT use new_client_lead tool."
+            "When the customer submits the form, a CRM Lead is created AUTOMATICALLY."
         ),
         "parameters": {
             "type": "object",

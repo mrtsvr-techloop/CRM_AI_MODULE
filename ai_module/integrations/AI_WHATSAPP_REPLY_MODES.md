@@ -335,15 +335,19 @@ def _sanitize_tool_args(args, thread_id):
 
 ### Available Tools
 
-**new_client_lead:**
-- Crea un nuovo Lead nel CRM
-- Riceve `phone_from` dal sistema (mai dall'utente)
-- Parametri: first_name, last_name, email, organization, notes
-
 **update_contact:**
 - Aggiorna dati Contact esistente
 - Riceve `phone_from` dal sistema
 - Parametri: first_name, last_name, email, organization
+
+**search_products:**
+- Cerca prodotti nel CRM per nome, tag o prezzo
+- Restituisce product_code necessario per gli ordini
+
+**generate_order_confirmation_form:**
+- Genera form di conferma ordine WhatsApp
+- Crea automaticamente Lead quando il form viene inviato
+- Parametri: customer_name, customer_surname, products, delivery_address
 
 ## 📊 Persistence Files
 
@@ -402,7 +406,7 @@ bench console
 
 # Check implementation
 >>> from ai_module.agents.tool_registry import get_tool_impl
->>> get_tool_impl("new_client_lead")
+>>> get_tool_impl("generate_order_confirmation_form")
 ```
 
 ### Risposte in lingua sbagliata

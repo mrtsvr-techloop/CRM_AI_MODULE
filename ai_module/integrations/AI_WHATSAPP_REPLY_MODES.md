@@ -335,11 +335,6 @@ def _sanitize_tool_args(args, thread_id):
 
 ### Available Tools
 
-**new_client_lead:**
-- Crea un nuovo Lead nel CRM
-- Riceve `phone_from` dal sistema (mai dall'utente)
-- Parametri: first_name, last_name, email, organization, notes
-
 **update_contact:**
 - Aggiorna dati Contact esistente
 - Riceve `phone_from` dal sistema
@@ -402,7 +397,7 @@ bench console
 
 # Check implementation
 >>> from ai_module.agents.tool_registry import get_tool_impl
->>> get_tool_impl("new_client_lead")
+>>> get_tool_impl("update_contact")
 ```
 
 ### Risposte in lingua sbagliata

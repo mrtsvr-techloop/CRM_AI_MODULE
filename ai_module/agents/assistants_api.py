@@ -10,6 +10,7 @@ from openai import OpenAI
 from typing import Dict, Any, Optional
 import time
 import json
+import threading
 
 
 def _log():
@@ -87,13 +88,14 @@ def create_vector_store_with_file(file_path: str, store_name: str) -> str:
 	return vector_store.id
 
 
-def create_assistant_with_vector_store(vector_store_id: str, instructions: str, model: str) -> str:
+def create_assistant_with_vector_store(vector_store_id: str, instructions: str, model: str, name: Optional[str] = None) -> str:
 	"""Create an Assistant with file_search tool AND function calling tools linked to Vector Store.
 	
 	Args:
 		vector_store_id: ID of the vector store to attach
 		instructions: System instructions for the assistant
 		model: Model to use (e.g., gpt-4o-mini)
+		name: Optional name for the assistant (defaults to "CRM Assistant with Knowledge Base")
 	
 	Returns:
 		Assistant ID
@@ -128,8 +130,9 @@ def create_assistant_with_vector_store(vector_store_id: str, instructions: str, 
 	
 	_log().info(f"Creating Assistant with {len(tools)} tools (1 file_search + {len(function_tools)} functions)")
 	
+	assistant_name = name or "CRM Assistant with Knowledge Base"
 	assistant = client.beta.assistants.create(
-		name="CRM Assistant with Knowledge Base",
+		name=assistant_name,
 		instructions=instructions,
 		model=model,
 		tools=tools,
@@ -140,8 +143,92 @@ def create_assistant_with_vector_store(vector_store_id: str, instructions: str, 
 		}
 	)
 	
-	_log().info(f"Assistant created: {assistant.id}")
+	_log().info(f"Assistant created: {assistant.id} (name: {assistant_name})")
 	return assistant.id
+
+
+def update_assistant_on_openai(assistant_id: str, instructions: Optional[str] = None, model: Optional[str] = None, name: Optional[str] = None, vector_store_id: Optional[str] = None) -> bool:
+	"""Update an existing Assistant on OpenAI.
+	
+	Args:
+		assistant_id: OpenAI Assistant ID to update
+		instructions: Optional new instructions (if None, keeps existing)
+		model: Optional new model (if None, keeps existing)
+		name: Optional new name (if None, keeps existing)
+		vector_store_id: Optional new vector store ID (if None, keeps existing)
+	
+	Returns:
+		True if update succeeded, False otherwise
+	"""
+	from .config import apply_environment, get_environment
+	from .assistant_spec import get_assistant_tools
+	
+	try:
+		apply_environment()
+		env = get_environment()
+		api_key = env.get("OPENAI_API_KEY")
+		
+		if not api_key:
+			_log().warning("OPENAI_API_KEY not configured")
+			return False
+		
+		client = OpenAI(api_key=api_key)
+		
+		# Verify assistant exists
+		try:
+			assistant = client.beta.assistants.retrieve(assistant_id)
+		except Exception as e:
+			_log().warning(f"Assistant {assistant_id} not found on OpenAI: {e}")
+			return False
+		
+		# Build update payload with only changed fields
+		update_data = {}
+		
+		if instructions is not None:
+			update_data["instructions"] = instructions
+		
+		if model is not None:
+			update_data["model"] = model
+		
+		if name is not None:
+			update_data["name"] = name
+		
+		# Handle vector store update
+		if vector_store_id is not None:
+			# Get all function calling tools from the system
+			function_tools = get_assistant_tools()
+			
+			# Build tools list: file_search + all function tools
+			tools = [{"type": "file_search"}]
+			
+			# Add function calling tools
+			for tool in function_tools:
+				if tool.get("type") == "function":
+					tools.append({
+						"type": "function",
+						"function": tool["function"]
+					})
+			
+			update_data["tools"] = tools
+			update_data["tool_resources"] = {
+				"file_search": {
+					"vector_store_ids": [vector_store_id]
+				}
+			}
+		
+		if not update_data:
+			_log().debug(f"No changes to apply to assistant {assistant_id}")
+			return True
+		
+		_log().info(f"Updating Assistant {assistant_id} with fields: {list(update_data.keys())}")
+		client.beta.assistants.update(assistant_id, **update_data)
+		
+		_log().info(f"Assistant {assistant_id} updated successfully")
+		return True
+		
+	except Exception as e:
+		_log().error(f"Failed to update assistant {assistant_id}: {e}")
+		return False
 
 
 def run_with_assistants_api(
@@ -175,37 +262,91 @@ def run_with_assistants_api(
 	
 	client = OpenAI(api_key=api_key)
 	
-	# Get or create thread for this session
-	thread_id = _get_or_create_thread(client, session_id)
+	# PRODUCTION-READY: Serializza messaggi dello stesso utente usando thread lock
+	# Ogni numero di telefono ha il suo lock, quindi utenti diversi possono interagire simultaneamente
+	# Solo lo stesso utente che invia messaggi rapidi viene serializzato
+	lock = _get_thread_lock(session_id or "default")
 	
-	_log().info(f"AI request (Assistants API): message_len={len(message)} thread={thread_id}")
-	
-	# Add message to thread
-	client.beta.threads.messages.create(
-		thread_id=thread_id,
-		role="user",
-		content=message
-	)
-	
-	# Run assistant
-	try:
-		run = client.beta.threads.runs.create(
-			thread_id=thread_id,
-			assistant_id=assistant_id
-		)
-	except Exception as e:
-		error_msg = str(e)
-		_log().error(f"Failed to create run: {error_msg}")
+	with lock:
+		# Get or create thread for this session
+		thread_id = _get_or_create_thread(client, session_id)
 		
-		# If assistant doesn't exist, provide helpful error
-		if "assistant" in error_msg.lower() or "not found" in error_msg.lower():
-			raise Exception(
-				f"Assistant {assistant_id} not found. Please re-upload the PDF in AI Assistant Settings "
-				f"to recreate the Assistant with the latest configuration."
+		_log().info(f"AI request (Assistants API): message_len={len(message)} thread={thread_id}")
+		
+		# Check for active runs and wait for them to complete
+		# Since we're serialized by lock, this should rarely be needed,
+		# but handles edge cases where a run might still be active
+		max_wait_time = 10  # Reduced since we're serialized
+		wait_start = time.time()
+		
+		while True:
+			try:
+				runs = client.beta.threads.runs.list(thread_id=thread_id, limit=1)
+				active_run = None
+				
+				for run in runs.data:
+					if run.status in ["queued", "in_progress", "requires_action"]:
+						active_run = run
+						break
+				
+				if not active_run:
+					# No active run, safe to add message
+					break
+				
+				# Check if we've waited too long
+				if time.time() - wait_start > max_wait_time:
+					_log().warning(
+						f"Active run {active_run.id} still running after {max_wait_time}s. "
+						f"Cancelling to allow new message."
+					)
+					try:
+						client.beta.threads.runs.cancel(thread_id=thread_id, run_id=active_run.id)
+						time.sleep(0.5)  # Wait for cancellation
+						break
+					except Exception as cancel_error:
+						_log().warning(f"Failed to cancel run {active_run.id}: {cancel_error}")
+						break
+				
+				# Wait a bit and check again
+				_log().debug(f"Waiting for run {active_run.id} to complete (status: {active_run.status})")
+				time.sleep(1)
+				
+			except Exception as list_error:
+				_log().debug(f"Could not check for active runs: {list_error}")
+				break
+		
+		# Add message to thread
+		client.beta.threads.messages.create(
+			thread_id=thread_id,
+			role="user",
+			content=message
+		)
+		
+		# Run assistant (inside lock to prevent race conditions)
+		try:
+			run = client.beta.threads.runs.create(
+				thread_id=thread_id,
+				assistant_id=assistant_id
 			)
-		raise
+		except Exception as e:
+			error_msg = str(e)
+			_log().error(f"Failed to create run: {error_msg}")
+			
+			# If assistant doesn't exist, provide helpful error
+			if "assistant" in error_msg.lower() or "not found" in error_msg.lower():
+				raise Exception(
+					f"Assistant {assistant_id} not found. Please re-upload the PDF in AI Assistant Settings "
+					f"to recreate the Assistant with the latest configuration."
+				)
+			raise
+		
+		# Release lock immediately after creating run to allow next message from same user
+		# The run will continue processing asynchronously on OpenAI side
+		# This ensures we can handle multiple rapid messages from same user
+		# Note: Lock is automatically released when exiting 'with lock:' block
 	
-	# Poll for completion and handle tool calls
+	# Poll for completion and handle tool calls (outside lock)
+	# Multiple runs from same user can poll concurrently, but run creation is serialized
 	start = time.time()
 	while time.time() - start < timeout_s:
 		run = client.beta.threads.runs.retrieve(
@@ -392,6 +533,24 @@ def _get_or_create_thread(client: OpenAI, session_id: Optional[str]) -> str:
 	return thread.id
 
 
+# Thread locks per serializzare messaggi dello stesso utente quando usa Assistants API
+# Production-ready: previene race conditions quando lo stesso utente invia messaggi rapidi
+_thread_locks: Dict[str, threading.Lock] = {}
+_locks_lock = threading.Lock()  # Lock per gestire il dict dei locks
+
+
+def _get_thread_lock(session_id: str) -> threading.Lock:
+	"""Get or create a thread lock for a session_id.
+	
+	This ensures messages from the same user are processed sequentially
+	when using Assistants API (which doesn't allow concurrent runs on same thread).
+	"""
+	with _locks_lock:
+		if session_id not in _thread_locks:
+			_thread_locks[session_id] = threading.Lock()
+		return _thread_locks[session_id]
+
+
 def _get_thread_map_path() -> str:
 	"""Get path to thread mapping file."""
 	import os
@@ -420,9 +579,18 @@ def _save_json_file(path: str, data: dict) -> None:
 	import json
 	import os
 	
-	os.makedirs(os.path.dirname(path), exist_ok=True)
-	with open(path, "w") as f:
-		json.dump(data, f, indent=2)
+	# Ensure directory exists with proper permissions
+	dir_path = os.path.dirname(path)
+	os.makedirs(dir_path, mode=0o755, exist_ok=True)
+	
+	try:
+		with open(path, "w") as f:
+			json.dump(data, f, indent=2)
+		# Set file permissions
+		os.chmod(path, 0o644)
+	except Exception as e:
+		_log().error(f"Failed to save JSON file {path}: {e}")
+		raise
 
 
 def delete_vector_store(vector_store_id: str) -> bool:

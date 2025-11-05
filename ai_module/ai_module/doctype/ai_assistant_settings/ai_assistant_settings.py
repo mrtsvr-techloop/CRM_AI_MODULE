@@ -6,32 +6,61 @@ With Responses API, settings are used per-request, not stored in a persistent As
 
 from __future__ import annotations
 
+from typing import Dict, Any
+
 import frappe
 from frappe.model.document import Document
 
 from ai_module.agents.config import get_environment
 from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+from ai_module.agents.logger_utils import get_resilient_logger
+
+
+def _log():
+	"""Get logger for AI Assistant Settings."""
+	return get_resilient_logger("ai_module.ai_assistant_settings")
 
 
 class AIAssistantSettings(Document):
 	def before_save(self):
-		"""Process PDF if changed and create/update Vector Store."""
-		if self.enable_pdf_context and self.has_value_changed('knowledge_pdf'):
-			if self.knowledge_pdf:
-				self._setup_pdf_context()
-			else:
-				self._cleanup_pdf_context()
+		"""Process PDF if changed and create/update Vector Store.
+		Also handles updates to instructions/model/name when PDF is active."""
+		# Handle PDF context enable/disable or PDF file change
+		if self.enable_pdf_context:
+			pdf_changed = self.has_value_changed('knowledge_pdf')
+			pdf_enabled = self.has_value_changed('enable_pdf_context') and self.enable_pdf_context
+			
+			if pdf_changed or pdf_enabled:
+				if self.knowledge_pdf:
+					# PDF changed or PDF context just enabled, setup everything
+					self._setup_pdf_context(pdf_changed=pdf_changed)
+				else:
+					self._cleanup_pdf_context()
+			elif self.knowledge_pdf:
+				# PDF is active and unchanged, check if we need to update assistant on OpenAI
+				if self.assistant_id:
+					self._update_openai_assistant_if_needed()
+				elif self.knowledge_pdf:
+					# PDF exists but no assistant - might have been deleted on OpenAI, recreate
+					self._setup_pdf_context(pdf_changed=True)
 		elif not self.enable_pdf_context and (self.vector_store_id or self.assistant_id):
 			# PDF context disabled, cleanup
 			self._cleanup_pdf_context()
-
-	def _setup_pdf_context(self):
-		"""Setup Vector Store and Assistant for PDF context."""
+	
+	def _setup_pdf_context(self, pdf_changed: bool = True):
+		"""Setup Vector Store and Assistant for PDF context.
+		This creates/updates the OpenAI Assistant with PDF context.
+		If assistant already exists and PDF file hasn't changed, it will be updated instead of recreated.
+		
+		Args:
+			pdf_changed: True if PDF file was changed, False otherwise
+		"""
 		from ai_module.agents.assistants_api import (
 			create_vector_store_with_file,
 			create_assistant_with_vector_store,
 			delete_vector_store,
-			delete_assistant
+			delete_assistant,
+			update_assistant_on_openai
 		)
 		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
 		import os
@@ -47,6 +76,49 @@ class AIAssistantSettings(Document):
 		if file_size_mb > 32:
 			frappe.throw(f"PDF too large: {file_size_mb:.1f}MB (max 32MB)")
 		
+		# Get assistant name from doctype
+		assistant_name = getattr(self, 'assistant_name', None) or "CRM Assistant with Knowledge Base"
+		
+		# Get instructions and model
+		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip()
+		model = self.model or "gpt-4o-mini"
+		
+		# If assistant already exists and PDF file hasn't changed, just update assistant config
+		# This prevents creating duplicate Vector Stores when re-saving with same PDF
+		if self.assistant_id and self.vector_store_id and not pdf_changed:
+			_log().info(f"PDF unchanged, updating existing assistant {self.assistant_id}")
+			updated = update_assistant_on_openai(
+				assistant_id=self.assistant_id,
+				instructions=instructions,
+				model=model,
+				name=assistant_name
+			)
+			if not updated:
+				# Assistant might have been deleted on OpenAI, recreate it
+				_log().warning(f"Failed to update assistant {self.assistant_id}, recreating...")
+				self._recreate_assistant(file_path, file_size_mb, assistant_name, instructions, model)
+			else:
+				self.pdf_uploaded_at = frappe.utils.now()
+				self.pdf_file_size_mb = round(file_size_mb, 2)
+				frappe.msgprint(
+					f"Assistant updated successfully!<br>"
+					f"Assistant: {self.assistant_id}",
+					title="Assistant Updated",
+					indicator="green"
+				)
+		else:
+			# PDF changed or no assistant exists, create new setup
+			self._recreate_assistant(file_path, file_size_mb, assistant_name, instructions, model)
+	
+	def _recreate_assistant(self, file_path: str, file_size_mb: float, assistant_name: str, instructions: str, model: str):
+		"""Recreate Vector Store and Assistant (used when PDF changes or assistant doesn't exist)."""
+		from ai_module.agents.assistants_api import (
+			create_vector_store_with_file,
+			create_assistant_with_vector_store,
+			delete_vector_store,
+			delete_assistant
+		)
+		
 		# Delete old resources if they exist
 		if self.vector_store_id:
 			delete_vector_store(self.vector_store_id)
@@ -58,11 +130,12 @@ class AIAssistantSettings(Document):
 		vector_store_id = create_vector_store_with_file(file_path, store_name)
 		
 		# Create Assistant with file_search
-		# Instructions are now plain text (Long Text field), no HTML cleaning needed
-		# Note: PDF citations (【】) are automatically removed by the response filter
-		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip()
-		model = self.model or "gpt-4o-mini"
-		assistant_id = create_assistant_with_vector_store(vector_store_id, instructions, model)
+		assistant_id = create_assistant_with_vector_store(
+			vector_store_id=vector_store_id,
+			instructions=instructions,
+			model=model,
+			name=assistant_name
+		)
 		
 		# Save IDs
 		self.vector_store_id = vector_store_id
@@ -77,6 +150,52 @@ class AIAssistantSettings(Document):
 			title="Knowledge Base Ready",
 			indicator="green"
 		)
+	
+	def _update_openai_assistant_if_needed(self):
+		"""Update OpenAI Assistant when instructions/model/name change but PDF is unchanged."""
+		from ai_module.agents.assistants_api import update_assistant_on_openai
+		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+		
+		# Check if any relevant field changed
+		instructions_changed = self.has_value_changed('instructions')
+		model_changed = self.has_value_changed('model')
+		name_changed = self.has_value_changed('assistant_name')
+		
+		if not (instructions_changed or model_changed or name_changed):
+			return
+		
+		if not self.assistant_id:
+			return
+		
+		# Get current values
+		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip() if instructions_changed else None
+		model = self.model or "gpt-4o-mini" if model_changed else None
+		assistant_name = (getattr(self, 'assistant_name', None) or "CRM Assistant with Knowledge Base") if name_changed else None
+		
+		_log().info(f"Updating OpenAI Assistant {self.assistant_id} due to field changes")
+		
+		updated = update_assistant_on_openai(
+			assistant_id=self.assistant_id,
+			instructions=instructions,
+			model=model,
+			name=assistant_name
+		)
+		
+		if updated:
+			frappe.msgprint(
+				f"Assistant updated on OpenAI successfully!<br>"
+				f"Assistant: {self.assistant_id}",
+				title="Assistant Updated",
+				indicator="green"
+			)
+		else:
+			# Assistant might have been deleted, but we can't recreate without PDF
+			frappe.msgprint(
+				f"Warning: Could not update assistant on OpenAI.<br>"
+				f"Please re-upload the PDF to recreate the assistant.",
+				title="Update Failed",
+				indicator="orange"
+			)
 
 	def _cleanup_pdf_context(self):
 		"""Cleanup Vector Store and Assistant when PDF is removed."""
@@ -148,11 +267,19 @@ class AIAssistantSettings(Document):
 	def on_update(self):
 		# Upsert the Assistant whenever settings are saved, but skip during install
 		# or when provider credentials are not configured to avoid bricking install.
+		# IMPORTANT: If PDF context is enabled, DO NOT call upsert_assistant()
+		# because that handles the local Responses API, not the OpenAI Assistants API.
 		if getattr(frappe.flags, "in_install", False):
 			return
 		env = get_environment()
 		if not env.get("OPENAI_API_KEY"):
 			return
+		
+		# If PDF context is active, skip local assistant update
+		# The OpenAI Assistant is already managed in before_save()
+		if getattr(self, "enable_pdf_context", False):
+			return
+		
 		# If user opted into using settings as source, force upsert (create if missing)
 		# Otherwise, do NOT block save; assistant id will be resolved from env/persisted file
 		if not getattr(self, "use_settings_override", 0):
@@ -198,4 +325,96 @@ def ai_assistant_force_update() -> str:
 	updating a persistent Assistant object.
 	"""
 	from ai_module.agents.assistant_update import upsert_assistant
-	return upsert_assistant(force=True) 
+	return upsert_assistant(force=True)
+
+
+@frappe.whitelist(methods=["POST"])
+def ai_assistant_force_update_openai() -> Dict[str, Any]:
+	"""Force update OpenAI Assistant when PDF context is enabled.
+	
+	This function forces an update of the OpenAI Assistant with current
+	settings (instructions, model, name) even if fields haven't changed.
+	
+	Returns:
+		Dict with success status and message
+	"""
+	settings = frappe.get_single("AI Assistant Settings")
+	
+	if not settings.enable_pdf_context:
+		return {
+			"success": False,
+			"error": "PDF context is not enabled. Enable it first and upload a PDF."
+		}
+	
+	if not settings.knowledge_pdf:
+		return {
+			"success": False,
+			"error": "No PDF uploaded. Please upload a PDF first."
+		}
+	
+	if not settings.assistant_id:
+		return {
+			"success": False,
+			"error": "No Assistant ID found. Please re-upload the PDF to create the assistant."
+		}
+	
+	try:
+		from ai_module.agents.assistants_api import update_assistant_on_openai
+		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+		
+		instructions = (settings.instructions or DEFAULT_INSTRUCTIONS).strip()
+		model = settings.model or "gpt-4o-mini"
+		assistant_name = getattr(settings, 'assistant_name', None) or "CRM Assistant with Knowledge Base"
+		
+		_log().info(f"Forcing update of OpenAI Assistant {settings.assistant_id}")
+		
+		updated = update_assistant_on_openai(
+			assistant_id=settings.assistant_id,
+			instructions=instructions,
+			model=model,
+			name=assistant_name
+		)
+		
+		if updated:
+			return {
+				"success": True,
+				"message": f"Assistant {settings.assistant_id} updated successfully on OpenAI",
+				"assistant_id": settings.assistant_id,
+				"instructions": instructions[:100] + "..." if len(instructions) > 100 else instructions,
+				"model": model,
+				"name": assistant_name
+			}
+		else:
+			return {
+				"success": False,
+				"error": f"Failed to update assistant {settings.assistant_id}. It may have been deleted on OpenAI. Please re-upload the PDF."
+			}
+	except Exception as e:
+		_log().exception(f"Error forcing OpenAI assistant update: {e}")
+		return {
+			"success": False,
+			"error": str(e),
+			"traceback": frappe.get_traceback()
+		}
+
+
+@frappe.whitelist(methods=["GET"])
+def ai_assistant_check_status() -> Dict[str, Any]:
+	"""Check current status of AI Assistant configuration.
+	
+	Returns:
+		Dict with current configuration status
+	"""
+	settings = frappe.get_single("AI Assistant Settings")
+	
+	return {
+		"enable_pdf_context": bool(settings.enable_pdf_context),
+		"assistant_id": settings.assistant_id or None,
+		"vector_store_id": settings.vector_store_id or None,
+		"knowledge_pdf": settings.knowledge_pdf or None,
+		"model": settings.model or None,
+		"assistant_name": getattr(settings, 'assistant_name', None) or None,
+		"instructions_length": len(settings.instructions or ""),
+		"using_openai": bool(settings.enable_pdf_context and settings.assistant_id),
+		"using_local": not bool(settings.enable_pdf_context and settings.assistant_id)
+	} 

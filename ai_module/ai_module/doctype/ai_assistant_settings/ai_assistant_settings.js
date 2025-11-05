@@ -44,13 +44,44 @@ frappe.ui.form.on('AI Assistant Settings', {
 
     // Force Update Assistant
     frm.add_custom_button(__('Force Update Assistant'), () => {
-      frappe.call({
-        method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_force_update',
-        callback(r) {
-          const id = r.message;
-          frappe.msgprint(__('Assistant updated: {0}', [id || 'OK']));
-        },
-      });
+      // Check if PDF context is enabled
+      const useOpenAI = frm.doc.enable_pdf_context && frm.doc.assistant_id;
+      
+      if (useOpenAI) {
+        // PDF context is active, update OpenAI Assistant
+        frappe.call({
+          method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_force_update_openai',
+          callback(r) {
+            const result = r.message || {};
+            if (result.success) {
+              frappe.msgprint({
+                title: __('Success'),
+                message: __('Assistant updated on OpenAI successfully!<br>Assistant ID: {0}<br>Model: {1}<br>Name: {2}', [
+                  result.assistant_id || 'N/A',
+                  result.model || 'N/A',
+                  result.name || 'N/A'
+                ]),
+                indicator: 'green'
+              });
+            } else {
+              frappe.msgprint({
+                title: __('Error'),
+                message: __('Failed to update assistant: {0}', [result.error || 'Unknown error']),
+                indicator: 'red'
+              });
+            }
+          },
+        });
+      } else {
+        // PDF context not active, update local assistant
+        frappe.call({
+          method: 'ai_module.ai_module.doctype.ai_assistant_settings.ai_assistant_settings.ai_assistant_force_update',
+          callback(r) {
+            const id = r.message;
+            frappe.msgprint(__('Assistant updated: {0}', [id || 'OK']));
+          },
+        });
+      }
     });
 
     // Toggle fields' editability based on override flag

@@ -49,6 +49,22 @@ SCHEMA: Dict[str, Any] = {
                     },
                     "description": "Array of products with their CRM Product codes (from search_products) and quantities. Must contain at least one product."
                 },
+                "delivery_region": {
+                    "type": "string",
+                    "description": "Customer's delivery region"
+                },
+                "delivery_city": {
+                    "type": "string",
+                    "description": "Customer's delivery city"
+                },
+                "delivery_zip": {
+                    "type": "string",
+                    "description": "Customer's delivery zip code"
+                },
+                "delivery_date": {
+                    "type": "string",
+                    "description": "Customer's delivery date"
+                },
                 "delivery_address": {
                     "type": "string",
                     "description": "Customer's delivery address"
@@ -58,7 +74,7 @@ SCHEMA: Dict[str, Any] = {
                     "description": "Additional notes or special instructions"
                 }
             },
-            "required": ["products"]
+            "required": ["products", "delivery_region", "delivery_city", "delivery_zip", "delivery_date"]
         },
     },
 }
@@ -70,12 +86,16 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
     The form is pre-populated with the order details extracted from the conversation.
     
     Args:
-        customer_name: Customer's first name (extracted from conversation, optional)
-        customer_surname: Customer's last name/surname (extracted from conversation, optional)
+        customer_name: Customer's first name (extracted from conversation, Required)
+        customer_surname: Customer's last name/surname (extracted from conversation, Required)
         company_name: Customer's company name (optional, extracted from conversation)
         phone_from: Customer's phone number (automatically injected by security system)
         products: Array of products with product_id and product_quantity
-        delivery_address: Customer's delivery address (optional)
+        delivery_address: Customer's delivery address (Required)
+        delivery_region: Customer's delivery region (Required)
+        delivery_city: Customer's delivery city (Required)
+        delivery_zip: Customer's delivery zip code (Required)
+        delivery_date: Customer's delivery date (Required)
         notes: Additional notes or special instructions (optional)
     
     Returns:
@@ -108,7 +128,7 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         company_name = kwargs.get("company_name", "")
         
         # Validate required parameters
-        required_params = ["products"]
+        required_params = ["products", "delivery_region", "delivery_city", "delivery_zip", "delivery_date"]
         for param in required_params:
             if not kwargs.get(param):
                 return {
@@ -185,7 +205,11 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
                 "phone_number": phone_number,
                 "company_name": company_name,
                 "products": products,
+                "delivery_region": kwargs.get("delivery_region", ""),
+                "delivery_city": kwargs.get("delivery_city", ""),
+                "delivery_zip": kwargs.get("delivery_zip", ""),
                 "delivery_address": kwargs.get("delivery_address", ""),
+                "delivery_date": kwargs.get("delivery_date", ""),
                 "notes": kwargs.get("notes", "")
             }
             

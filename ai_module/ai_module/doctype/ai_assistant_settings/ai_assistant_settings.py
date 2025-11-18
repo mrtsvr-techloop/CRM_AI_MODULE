@@ -312,8 +312,8 @@ def ai_assistant_reset_persistence(clear_threads: bool = True) -> dict:
 	Returns:
 		{"success": bool, "deleted": {...}}
 	"""
-	from ai_module.api import ai_reset_persistence
-	return ai_reset_persistence(clear_threads=clear_threads)
+	from ai_module.api import reset_sessions
+	return reset_sessions()
 
 
 @frappe.whitelist(methods=["POST"])

@@ -235,7 +235,7 @@ def run_with_assistants_api(
 	message: str,
 	assistant_id: str,
 	session_id: Optional[str] = None,
-	timeout_s: int = 60
+	timeout_s: int = 120  # Increased timeout to 120s for complex queries with PDF context
 ) -> Dict[str, Any]:
 	"""Run conversation using Assistants API with file_search.
 	
@@ -381,6 +381,30 @@ def run_with_assistants_api(
 		
 		time.sleep(1)
 	else:
+		# Timeout occurred - try to get partial response if available
+		_log().warning(f"Assistant run timeout after {timeout_s}s, attempting to retrieve partial response")
+		try:
+			messages = client.beta.threads.messages.list(
+				thread_id=thread_id,
+				order="desc",
+				limit=1
+			)
+			if messages.data:
+				message_content = messages.data[0].content[0]
+				if hasattr(message_content, 'text'):
+					partial_text = message_content.text.value
+					if partial_text and partial_text.strip():
+						_log().info(f"Retrieved partial response despite timeout: {len(partial_text)} chars")
+						# Return partial response instead of raising error
+						return {
+							"final_output": partial_text,
+							"thread_id": thread_id,
+							"model": env.get("AI_ASSISTANT_MODEL") or "gpt-4o-mini",
+							"partial": True
+						}
+		except Exception as partial_err:
+			_log().warning(f"Could not retrieve partial response: {partial_err}")
+		
 		raise TimeoutError(f"Assistant run timeout after {timeout_s}s")
 	
 	# Get latest message

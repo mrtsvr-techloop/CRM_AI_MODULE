@@ -727,13 +727,36 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		
 		# Call AI agent
 		from ..agents.runner import run_agent
-		result = run_agent(
-			agent_or_name=agent_name,
-			input_text=composed_message,
-			session_id=session_id
-		)
-		_log().info(f"AI result type: {type(result)}")
-		_log().info(f"AI result content: {result}")
+		result = None
+		error_occurred = False
+		error_message = ""
+		
+		try:
+			result = run_agent(
+				agent_or_name=agent_name,
+				input_text=composed_message,
+				session_id=session_id
+			)
+			_log().info(f"AI result type: {type(result)}")
+			_log().info(f"AI result content: {result}")
+		except TimeoutError as timeout_err:
+			error_occurred = True
+			error_message = str(timeout_err)
+			_log().error(f"AI processing timeout: {error_message}")
+			logger.error(f"PROCESS_INCOMING TIMEOUT: {error_message}")
+			# Create a user-friendly timeout message
+			result = {
+				"final_output": "Mi dispiace, la richiesta sta richiedendo più tempo del previsto. Per favore riprova tra qualche momento o riformula la domanda in modo più specifico."
+			}
+		except Exception as ai_error:
+			error_occurred = True
+			error_message = str(ai_error)
+			_log().error(f"AI processing error: {error_message}")
+			logger.error(f"PROCESS_INCOMING ERROR: {error_message}")
+			# Create a user-friendly error message
+			result = {
+				"final_output": "Mi dispiace, si è verificato un errore durante l'elaborazione della tua richiesta. Per favore riprova tra qualche momento."
+			}
 		
 		# Handle auto-reply if enabled
 		should_autoreply = _should_autoreply()
@@ -766,8 +789,20 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		else:
 			logger.info("PROCESS_INCOMING: Auto-reply disabled")
 		
-	except Exception:
+	except Exception as outer_error:
+		# Log the error but also try to send a user-friendly message
+		_log().error(f"Unexpected error in process_incoming_whatsapp_message: {outer_error}")
 		frappe.log_error(
 			message=frappe.get_traceback(),
 			title="ai_module.integrations.whatsapp.process_incoming_whatsapp_message",
-		) 
+		)
+		
+		# Try to send error message to user if autoreply is enabled
+		try:
+			should_autoreply = _should_autoreply()
+			if should_autoreply and payload:
+				error_reply = "Mi dispiace, si è verificato un errore imprevisto. Per favore riprova tra qualche momento."
+				_send_autoreply(payload, error_reply)
+		except Exception:
+			# If sending error message fails, just log it
+			_log().warning("Could not send error message to user") 

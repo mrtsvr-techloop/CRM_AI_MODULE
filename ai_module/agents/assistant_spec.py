@@ -71,6 +71,7 @@ DEFAULT_INSTRUCTIONS = (
 	"     * Eventuale azienda (opzionale)\n"
 	"   - Usa i dati del contatto se disponibili, ma verifica sempre che siano completi\n"
 	"   - NON procedere senza avere TUTTI i dati essenziali\n"
+	"   - NON INSERIRE NON SPECIFICATO se non hai TUTTI i dati essenziali, Piuttosto chiedi i dati mancanti\n"
 	"\n"
 	"2. RICERCA PRODOTTI (OBBLIGATORIO):\n"
 	"   - ⚠️ USA SEMPRE search_products PRIMA di generare il form\n"

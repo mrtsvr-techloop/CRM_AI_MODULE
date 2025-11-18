@@ -114,11 +114,18 @@
 			"fieldtype": "Section Break"
 		},
 		{
+			"fieldname": "client_name",
+			"label": "Nome Cliente",
+			"fieldtype": "Data",
+			"reqd": 0,
+			"description": "Nome del cliente per cui è specializzato l'assistente (es. Techloop, Nardelli). Usa {{Cliente}} nel prompt per sostituirlo dinamicamente."
+		},
+		{
 			"fieldname": "instructions",
 			"label": "Instructions",
 			"fieldtype": "Long Text",
 			"reqd": 0,
-			"description": "System prompt used for the OpenAI Assistant (plain text, no HTML)"
+			"description": "System prompt used for the OpenAI Assistant (plain text, no HTML). Usa {{Cliente}} come placeholder per il nome cliente."
 		},
 		{
 			"fieldname": "section_whatsapp",

@@ -27,22 +27,61 @@ def get_current_instructions() -> str:
 	2. Environment variables AI_INSTRUCTIONS or AI_ASSISTANT_INSTRUCTIONS (if exist)
 	3. Code-defined prompt from assistant_spec
 	
+	Replaces {{Cliente}} placeholder with client_name from settings if available.
+	
 	Returns:
-		Instruction text for the AI
+		Instruction text for the AI with placeholders replaced
 	"""
+	# Get client name from settings
+	client_name = _get_client_name()
+	
 	# Try DocType first
 	instructions = get_settings_prompt_only()
 	if instructions:
-		return instructions
+		return _replace_placeholders(instructions, client_name)
 	
 	# Try environment variables if they exist
 	env_spec = get_env_assistant_spec()
 	if env_spec and env_spec.get("instructions"):
-		return env_spec["instructions"]
+		return _replace_placeholders(env_spec["instructions"], client_name)
 	
 	# Fallback to code-defined prompt
 	from .assistant_spec import get_instructions
-	return get_instructions()
+	instructions = get_instructions()
+	return _replace_placeholders(instructions, client_name)
+
+
+def _get_client_name() -> str:
+	"""Get client name from AI Assistant Settings.
+	
+	Returns:
+		Client name from settings, or 'il cliente' as default
+	"""
+	try:
+		settings = frappe.get_single("AI Assistant Settings")
+		client_name = getattr(settings, "client_name", "") or ""
+		return client_name.strip() if client_name else "il cliente"
+	except Exception:
+		return "il cliente"
+
+
+def _replace_placeholders(instructions: str, client_name: str) -> str:
+	"""Replace placeholders in instructions with actual values.
+	
+	Args:
+		instructions: Instruction text with placeholders
+		client_name: Client name to replace {{Cliente}} placeholder
+		
+	Returns:
+		Instructions with placeholders replaced
+	"""
+	if not instructions:
+		return instructions
+	
+	# Replace {{Cliente}} with actual client name
+	instructions = instructions.replace("{{Cliente}}", client_name)
+	
+	return instructions
 
 
 def get_current_tools():

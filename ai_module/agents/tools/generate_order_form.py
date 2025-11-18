@@ -20,11 +20,11 @@ SCHEMA: Dict[str, Any] = {
             "properties": {
                 "customer_name": {
                     "type": "string",
-                    "description": "Customer's first name (extracted from conversation)"
+                    "description": "Customer's first name (ESSENZIALE - OBBLIGATORIO, extracted from conversation)"
                 },
                 "customer_surname": {
                     "type": "string",
-                    "description": "Customer's last name/surname (extracted from conversation)"
+                    "description": "Customer's last name/surname (ESSENZIALE - OBBLIGATORIO, extracted from conversation)"
                 },
                 "company_name": {
                     "type": "string",
@@ -67,14 +67,14 @@ SCHEMA: Dict[str, Any] = {
                 },
                 "delivery_address": {
                     "type": "string",
-                    "description": "Customer's delivery address"
+                    "description": "Customer's delivery address (ESSENZIALE - OBBLIGATORIO)"
                 },
                 "notes": {
                     "type": "string",
                     "description": "Additional notes or special instructions"
                 }
             },
-            "required": ["products", "delivery_region", "delivery_city", "delivery_zip", "delivery_date"]
+            "required": ["products", "customer_name", "customer_surname", "delivery_region", "delivery_city", "delivery_zip", "delivery_address", "delivery_date"]
         },
     },
 }
@@ -127,13 +127,13 @@ def generate_order_confirmation_form(**kwargs) -> Dict[str, Any]:
         customer_surname = kwargs.get("customer_surname", "")
         company_name = kwargs.get("company_name", "")
         
-        # Validate required parameters
-        required_params = ["products", "delivery_region", "delivery_city", "delivery_zip", "delivery_date"]
+        # Validate required parameters (ESSENZIALI)
+        required_params = ["products", "customer_name", "customer_surname", "delivery_region", "delivery_city", "delivery_zip", "delivery_address", "delivery_date"]
         for param in required_params:
             if not kwargs.get(param):
                 return {
                     "success": False,
-                    "error": f"Missing required parameter: {param}"
+                    "error": f"Missing required parameter (ESSENZIALE): {param}"
                 }
         
         # Validate products array

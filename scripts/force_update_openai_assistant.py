@@ -39,11 +39,11 @@ def force_update_assistant():
 	print(f"✓ Vector Store ID: {settings.vector_store_id}")
 	print(f"✓ PDF File: {settings.knowledge_pdf}")
 	
-	# Get current settings
+	# Get current settings (use get_current_instructions to apply placeholder replacement)
 	from ai_module.agents.assistants_api import update_assistant_on_openai
-	from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+	from ai_module.agents.assistant_update import get_current_instructions
 	
-	instructions = (settings.instructions or DEFAULT_INSTRUCTIONS).strip()
+	instructions = get_current_instructions().strip()
 	model = settings.model or "gpt-4o-mini"
 	assistant_name = getattr(settings, 'assistant_name', None) or "CRM Assistant with Knowledge Base"
 	

@@ -13,6 +13,7 @@ from frappe.model.document import Document
 
 from ai_module.agents.config import get_environment
 from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+from ai_module.agents.assistant_update import get_current_instructions
 from ai_module.agents.logger_utils import get_resilient_logger
 
 
@@ -79,8 +80,9 @@ class AIAssistantSettings(Document):
 		# Get assistant name from doctype
 		assistant_name = getattr(self, 'assistant_name', None) or "CRM Assistant with Knowledge Base"
 		
-		# Get instructions and model
-		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip()
+		# Get instructions and model (use get_current_instructions to apply placeholder replacement)
+		# Pass self to use current DocType instance (with unsaved changes)
+		instructions = get_current_instructions(settings_instance=self).strip()
 		model = self.model or "gpt-4o-mini"
 		
 		# If assistant already exists and PDF file hasn't changed, just update assistant config
@@ -154,10 +156,9 @@ class AIAssistantSettings(Document):
 	def _update_openai_assistant_if_needed(self):
 		"""Update OpenAI Assistant when instructions/model/name change but PDF is unchanged."""
 		from ai_module.agents.assistants_api import update_assistant_on_openai
-		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
 		
 		# Check if any relevant field changed
-		instructions_changed = self.has_value_changed('instructions')
+		instructions_changed = self.has_value_changed('instructions') or self.has_value_changed('client_name')
 		model_changed = self.has_value_changed('model')
 		name_changed = self.has_value_changed('assistant_name')
 		
@@ -167,8 +168,9 @@ class AIAssistantSettings(Document):
 		if not self.assistant_id:
 			return
 		
-		# Get current values
-		instructions = (self.instructions or DEFAULT_INSTRUCTIONS).strip() if instructions_changed else None
+		# Get current values (use get_current_instructions to apply placeholder replacement)
+		# Pass self to use current DocType instance (with unsaved changes)
+		instructions = get_current_instructions(settings_instance=self).strip() if instructions_changed else None
 		model = self.model or "gpt-4o-mini" if model_changed else None
 		assistant_name = (getattr(self, 'assistant_name', None) or "CRM Assistant with Knowledge Base") if name_changed else None
 		
@@ -360,9 +362,11 @@ def ai_assistant_force_update_openai() -> Dict[str, Any]:
 	
 	try:
 		from ai_module.agents.assistants_api import update_assistant_on_openai
-		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+		from ai_module.agents.assistant_update import get_current_instructions
 		
-		instructions = (settings.instructions or DEFAULT_INSTRUCTIONS).strip()
+		# Use get_current_instructions to apply placeholder replacement
+		# Pass settings to use current DocType instance
+		instructions = get_current_instructions(settings_instance=settings).strip()
 		model = settings.model or "gpt-4o-mini"
 		assistant_name = getattr(settings, 'assistant_name', None) or "CRM Assistant with Knowledge Base"
 		

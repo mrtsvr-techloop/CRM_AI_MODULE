@@ -19,7 +19,7 @@ def _log():
 	return get_resilient_logger("ai_module.assistant_update")
 
 
-def get_current_instructions() -> str:
+def get_current_instructions(settings_instance=None) -> str:
 	"""Get AI instructions/prompt from DocType, environment, or fallback to code.
 	
 	Priority:
@@ -29,13 +29,23 @@ def get_current_instructions() -> str:
 	
 	Replaces {{Cliente}} placeholder with client_name from settings if available.
 	
+	Args:
+		settings_instance: Optional AIAssistantSettings DocType instance to use
+			instead of reading from database. Useful during save operations.
+	
 	Returns:
 		Instruction text for the AI with placeholders replaced
 	"""
-	# Get client name from settings
-	client_name = _get_client_name()
+	# Get client name from settings (use provided instance if available)
+	client_name = _get_client_name(settings_instance)
 	
 	# Try DocType first
+	# If settings_instance is provided, use its instructions directly
+	if settings_instance and getattr(settings_instance, "use_settings_override", 0):
+		instructions = (getattr(settings_instance, "instructions", "") or "").strip()
+		if instructions:
+			return _replace_placeholders(instructions, client_name)
+	
 	instructions = get_settings_prompt_only()
 	if instructions:
 		return _replace_placeholders(instructions, client_name)
@@ -51,15 +61,24 @@ def get_current_instructions() -> str:
 	return _replace_placeholders(instructions, client_name)
 
 
-def _get_client_name() -> str:
+def _get_client_name(settings_instance=None) -> str:
 	"""Get client name from AI Assistant Settings.
+	
+	Args:
+		settings_instance: Optional AIAssistantSettings DocType instance to use
+			instead of reading from database. Useful during save operations.
 	
 	Returns:
 		Client name from settings, or 'il cliente' as default
 	"""
 	try:
-		settings = frappe.get_single("AI Assistant Settings")
-		client_name = getattr(settings, "client_name", "") or ""
+		if settings_instance:
+			# Use provided instance (e.g., during save operation)
+			client_name = getattr(settings_instance, "client_name", "") or ""
+		else:
+			# Read from database
+			settings = frappe.get_single("AI Assistant Settings")
+			client_name = getattr(settings, "client_name", "") or ""
 		return client_name.strip() if client_name else "il cliente"
 	except Exception:
 		return "il cliente"

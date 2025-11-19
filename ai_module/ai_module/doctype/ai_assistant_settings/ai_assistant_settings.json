@@ -25,8 +25,9 @@
 			"fieldname": "assistant_name",
 			"label": "Assistant Name",
 			"fieldtype": "Data",
-			"read_only": 1,
-			"description": "Display name for the Assistant (from environment)"
+			"read_only": 0,
+			"depends_on": "eval:doc.use_settings_override==1",
+			"description": "Display name for the Assistant (from environment or DocType)"
 		},
 		{
 			"fieldname": "section_env",
@@ -37,22 +38,25 @@
 			"fieldname": "model",
 			"label": "Model",
 			"fieldtype": "Data",
-			"read_only": 1,
-			"description": "Effective model used (from env/conf or default)"
+			"read_only": 0,
+			"depends_on": "eval:doc.use_settings_override==1",
+			"description": "Effective model used (from env/conf or DocType)"
 		},
 		{
 			"fieldname": "project",
 			"label": "Project",
 			"fieldtype": "Data",
-			"read_only": 1,
-			"description": "Provider project (from env/conf)"
+			"read_only": 0,
+			"depends_on": "eval:doc.use_settings_override==1",
+			"description": "Provider project (from env/conf or DocType)"
 		},
 		{
 			"fieldname": "org_id",
 			"label": "Organization ID",
 			"fieldtype": "Data",
-			"read_only": 1,
-			"description": "Provider organization (from env/conf)"
+			"read_only": 0,
+			"depends_on": "eval:doc.use_settings_override==1",
+			"description": "Provider organization (from env/conf or DocType)"
 		},
 		{
 			"fieldname": "base_url",
@@ -105,7 +109,8 @@
 			"fieldname": "api_key",
 			"label": "OpenAI API Key",
 			"fieldtype": "Password",
-			"read_only": 1,
+			"read_only": 0,
+			"depends_on": "eval:doc.use_settings_override==1",
 			"description": "Stored securely. Used only when 'Use this DocType for configuration' is enabled."
 		},
 		{
@@ -136,7 +141,7 @@
 			"fieldname": "wa_enable_reaction",
 			"label": "Show reaction before AI processing (🤖)",
 			"fieldtype": "Check",
-			"default": 1
+			"default": 0
 		},
 		{
 			"fieldname": "wa_enable_autoreply",
@@ -154,7 +159,7 @@
 			"fieldname": "wa_human_cooldown_seconds",
 			"label": "Human takeover cooldown (seconds)",
 			"fieldtype": "Int",
-			"default": 300
+			"default": 0
 		},
 		{
 			"fieldname": "section_knowledge_base",

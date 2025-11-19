@@ -55,13 +55,34 @@ def _get_ai_settings():
 		return None
 
 
-def _get_decrypted_api_key() -> Optional[str]:
+def _get_decrypted_api_key(settings_instance=None) -> Optional[str]:
 	"""Securely retrieve the decrypted OpenAI API key from settings.
+	
+	Args:
+		settings_instance: Optional DocType instance to use (for unsaved changes)
 	
 	Returns:
 		API key string or None if not set/accessible
 	"""
 	try:
+		# If instance provided, check if api_key was modified
+		if settings_instance:
+			# Check if the field was changed (new value provided)
+			if hasattr(settings_instance, 'has_value_changed') and settings_instance.has_value_changed('api_key'):
+				api_key_value = getattr(settings_instance, "api_key", None)
+				if api_key_value:
+					# During save, if field was changed, value is in plain text
+					return (api_key_value or "").strip() or None
+			# If field wasn't changed, try to get from instance (might be encrypted)
+			# but fallback to database if not available
+			api_key_value = getattr(settings_instance, "api_key", None)
+			if api_key_value and not api_key_value.startswith("*"):  # Not masked
+				# Value might be plain text (during save) or encrypted
+				# Try to use it, but if it looks encrypted, fall through to database
+				if len(api_key_value) > 20:  # API keys are usually longer
+					return (api_key_value or "").strip() or None
+		
+		# Otherwise, get from database
 		from frappe.utils.password import get_decrypted_password
 		
 		api_key = get_decrypted_password(
@@ -75,23 +96,31 @@ def _get_decrypted_api_key() -> Optional[str]:
 		return None
 
 
-def _get_settings_overrides() -> Dict[str, str]:
+def _get_settings_overrides(settings_instance=None) -> Dict[str, str]:
 	"""Extract environment overrides from AI Assistant Settings DocType.
 	
 	Only returns overrides if use_settings_override flag is enabled.
 	Includes API key, base URL, org ID, project, assistant name/model.
 	
+	Args:
+		settings_instance: Optional DocType instance to use (for unsaved changes)
+	
 	Returns:
 		Dict of environment variable overrides
 	"""
-	settings = _get_ai_settings()
+	# Use provided instance or get from database
+	if settings_instance:
+		settings = settings_instance
+	else:
+		settings = _get_ai_settings()
+	
 	if not settings or not getattr(settings, "use_settings_override", 0):
 		return {}
 	
 	overrides: Dict[str, str] = {}
 	
 	# API key (encrypted field)
-	api_key = _get_decrypted_api_key()
+	api_key = _get_decrypted_api_key(settings_instance=settings)
 	if api_key:
 		overrides[OPENAI_API_KEY] = api_key
 	
@@ -134,7 +163,7 @@ def _get_settings_overrides() -> Dict[str, str]:
 	return overrides
 
 
-def get_environment() -> Dict[str, str]:
+def get_environment(settings_instance=None) -> Dict[str, str]:
 	"""Get merged environment variables from all sources.
 	
 	Precedence order (later overrides earlier):
@@ -144,6 +173,9 @@ def get_environment() -> Dict[str, str]:
 	
 	This allows configuration via Frappe Cloud GUI or DocType without
 	code changes, with DocType having highest priority for flexibility.
+	
+	Args:
+		settings_instance: Optional DocType instance to use (for unsaved changes)
 	
 	Returns:
 		Dict of all environment variables
@@ -155,12 +187,12 @@ def get_environment() -> Dict[str, str]:
 	merged.update(_get_frappe_environment())
 	
 	# Override with DocType settings (highest priority)
-	merged.update(_get_settings_overrides())
+	merged.update(_get_settings_overrides(settings_instance=settings_instance))
 	
 	return merged
 
 
-def apply_environment() -> None:
+def apply_environment(settings_instance=None) -> None:
 	"""Apply OpenAI environment variables to the process.
 	
 	Extracts OpenAI-specific keys from merged environment and sets them
@@ -174,8 +206,11 @@ def apply_environment() -> None:
 	- OPENAI_ORG_ID (for organization-specific API)
 	- OPENAI_PROJECT (for project-specific API)
 	- OPENAI_BASE_URL (for custom API endpoints)
+	
+	Args:
+		settings_instance: Optional DocType instance to use (for unsaved changes)
 	"""
-	env = get_environment()
+	env = get_environment(settings_instance=settings_instance)
 	
 	# Apply OpenAI-specific environment variables
 	openai_keys = [OPENAI_API_KEY, OPENAI_ORG_ID, OPENAI_PROJECT, OPENAI_BASE_URL]

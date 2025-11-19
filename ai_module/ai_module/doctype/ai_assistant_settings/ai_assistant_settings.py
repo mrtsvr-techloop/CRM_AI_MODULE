@@ -64,7 +64,11 @@ class AIAssistantSettings(Document):
 			update_assistant_on_openai
 		)
 		from ai_module.agents.assistant_spec import DEFAULT_INSTRUCTIONS
+		from ai_module.agents.config import apply_environment
 		import os
+		
+		# Apply environment with current DocType instance (for unsaved API key)
+		apply_environment(settings_instance=self)
 		
 		# Validate PDF file
 		file_path = frappe.get_site_path('public', self.knowledge_pdf.lstrip('/'))
@@ -156,6 +160,10 @@ class AIAssistantSettings(Document):
 	def _update_openai_assistant_if_needed(self):
 		"""Update OpenAI Assistant when instructions/model/name change but PDF is unchanged."""
 		from ai_module.agents.assistants_api import update_assistant_on_openai
+		from ai_module.agents.config import apply_environment
+		
+		# Apply environment with current DocType instance (for unsaved API key)
+		apply_environment(settings_instance=self)
 		
 		# Check if any relevant field changed
 		instructions_changed = self.has_value_changed('instructions') or self.has_value_changed('client_name')
@@ -219,10 +227,18 @@ class AIAssistantSettings(Document):
 		When `use_settings_override` is enabled, fields remain as user-entered and editable.
 		"""
 		use_settings = bool(getattr(self, "use_settings_override", 0))
-		if use_settings:
-			return
 		env = get_environment()
 		conf = frappe.conf or {}
+		
+		if use_settings:
+			# When using DocType settings, check if API key is present in DocType
+			from ai_module.agents.config import _get_decrypted_api_key
+			api_key = _get_decrypted_api_key(settings_instance=self)
+			self.api_key_present = 1 if api_key else 0
+			# Don't overwrite user-entered values
+			return
+		
+		# When NOT using DocType settings, populate from environment
 		self.assistant_name = conf.get("AI_ASSISTANT_NAME") or env.get("AI_ASSISTANT_NAME") or ""
 		self.model = conf.get("AI_ASSISTANT_MODEL") or env.get("AI_ASSISTANT_MODEL") or ""
 		self.project = conf.get("OPENAI_PROJECT") or env.get("OPENAI_PROJECT") or ""
@@ -244,21 +260,19 @@ class AIAssistantSettings(Document):
 		
 		# Normalize instructions; allow empty and rely on runtime fallback
 		self.instructions = (self.instructions or "").strip()
-		# Do not enforce API key at save time; runtime will skip actions if missing
-		# Note: assistant_id is now used for PDF context (Assistants API with file_search)
-		# It's managed by _setup_pdf_context and should not be cleared here
-		if not use_settings:
-			# When override is OFF, set default values for WhatsApp orchestration
-			# These are used as defaults when no environment variable is set
-			# Note: These defaults are only for display; actual behavior is controlled by environment
-			if not hasattr(self, "wa_enable_reaction") or self.wa_enable_reaction is None:
-				self.wa_enable_reaction = 1
-			if not hasattr(self, "wa_enable_autoreply") or self.wa_enable_autoreply is None:
-				self.wa_enable_autoreply = 1
-			if not hasattr(self, "wa_force_inline") or self.wa_force_inline is None:
-				self.wa_force_inline = 0
-			if not hasattr(self, "wa_human_cooldown_seconds") or self.wa_human_cooldown_seconds is None:
-				self.wa_human_cooldown_seconds = 300
+		
+		# Set default values for WhatsApp orchestration
+		# When use_settings_override is ON, these are the actual values used
+		# When use_settings_override is OFF, these are defaults for display only
+		if not hasattr(self, "wa_enable_reaction") or self.wa_enable_reaction is None:
+			self.wa_enable_reaction = 0  # Default: false
+		if not hasattr(self, "wa_enable_autoreply") or self.wa_enable_autoreply is None:
+			self.wa_enable_autoreply = 1  # Default: true
+		if not hasattr(self, "wa_force_inline") or self.wa_force_inline is None:
+			self.wa_force_inline = 0  # Default: false
+		if not hasattr(self, "wa_human_cooldown_seconds") or self.wa_human_cooldown_seconds is None:
+			self.wa_human_cooldown_seconds = 0  # Default: 0 seconds
+		
 		# Always refresh display fields before save (no-op if override is on)
 		self._populate_readonly_from_env()
 
@@ -363,6 +377,10 @@ def ai_assistant_force_update_openai() -> Dict[str, Any]:
 	try:
 		from ai_module.agents.assistants_api import update_assistant_on_openai
 		from ai_module.agents.assistant_update import get_current_instructions
+		from ai_module.agents.config import apply_environment
+		
+		# Apply environment with current DocType instance (for API key)
+		apply_environment(settings_instance=settings)
 		
 		# Use get_current_instructions to apply placeholder replacement
 		# Pass settings to use current DocType instance

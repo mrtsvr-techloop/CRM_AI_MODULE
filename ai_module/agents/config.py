@@ -65,24 +65,46 @@ def _get_decrypted_api_key(settings_instance=None) -> Optional[str]:
 		API key string or None if not set/accessible
 	"""
 	try:
-		# If instance provided, check if api_key was modified
+		# If instance provided, try multiple methods to get the actual value
 		if settings_instance:
-			# Check if the field was changed (new value provided)
-			if hasattr(settings_instance, 'has_value_changed') and settings_instance.has_value_changed('api_key'):
-				api_key_value = getattr(settings_instance, "api_key", None)
-				if api_key_value:
-					# During save, if field was changed, value is in plain text
-					return (api_key_value or "").strip() or None
-			# If field wasn't changed, try to get from instance (might be encrypted)
-			# but fallback to database if not available
-			api_key_value = getattr(settings_instance, "api_key", None)
-			if api_key_value and not api_key_value.startswith("*"):  # Not masked
-				# Value might be plain text (during save) or encrypted
-				# Try to use it, but if it looks encrypted, fall through to database
-				if len(api_key_value) > 20:  # API keys are usually longer
-					return (api_key_value or "").strip() or None
+			# Check if document exists in database
+			doc_exists = bool(getattr(settings_instance, 'name', None) and 
+			                 frappe.db.exists("AI Assistant Settings", settings_instance.name))
+			
+			# Method 1: If field was just modified, try to get from _doc first
+			# During before_save, if the field was changed, the value is in _doc before masking
+			try:
+				if hasattr(settings_instance, 'has_value_changed') and settings_instance.has_value_changed('api_key'):
+					# Try to get from _doc which contains the raw values before processing
+					if hasattr(settings_instance, '_doc') and isinstance(settings_instance._doc, dict):
+						api_key_value = settings_instance._doc.get('api_key')
+						if api_key_value and isinstance(api_key_value, str) and api_key_value.strip() and not api_key_value.startswith("*"):
+							return api_key_value.strip()
+			except (AttributeError, Exception):
+				pass
+			
+			# Method 2: Use get_password() which works for saved documents
+			# This accesses the value from the database or from the document's internal storage
+			try:
+				api_key = settings_instance.get_password("api_key")
+				if api_key and isinstance(api_key, str) and api_key.strip() and not api_key.startswith("*"):
+					return api_key.strip()
+			except (AttributeError, Exception):
+				pass
+			
+			# Method 3: If document exists, get from database
+			if doc_exists:
+				from frappe.utils.password import get_decrypted_password
+				api_key = get_decrypted_password(
+					"AI Assistant Settings",
+					settings_instance.name,
+					"api_key",
+					raise_exception=False,
+				)
+				if api_key and api_key.strip():
+					return api_key.strip()
 		
-		# Otherwise, get from database
+		# Method 4: Fallback - get from database using singleton name
 		from frappe.utils.password import get_decrypted_password
 		
 		api_key = get_decrypted_password(
@@ -91,7 +113,10 @@ def _get_decrypted_api_key(settings_instance=None) -> Optional[str]:
 			"api_key",
 			raise_exception=False,
 		)
-		return (api_key or "").strip() or None
+		if api_key and api_key.strip():
+			return api_key.strip()
+		
+		return None
 	except Exception:
 		return None
 

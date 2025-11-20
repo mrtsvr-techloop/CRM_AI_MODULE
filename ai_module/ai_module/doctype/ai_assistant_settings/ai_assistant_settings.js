@@ -7,6 +7,79 @@ frappe.ui.form.on('AI Assistant Settings', {
     };
 
     toggle_editability();
+    
+    // Add emoji picker for wa_reaction_emoji field
+    if (frm.fields_dict.wa_reaction_emoji && frm.fields_dict.wa_reaction_emoji.$input) {
+      const emojiField = frm.fields_dict.wa_reaction_emoji;
+      const $wrapper = emojiField.$wrapper;
+      
+      // Create emoji picker button
+      if (!$wrapper.find('.emoji-picker-btn').length) {
+        const $emojiBtn = $(`
+          <button type="button" class="btn btn-sm btn-secondary emoji-picker-btn" style="margin-left: 5px;">
+            <span class="emoji-display">${frm.doc.wa_reaction_emoji || '🤖'}</span> 📋
+          </button>
+        `);
+        
+        $emojiBtn.on('click', function() {
+          // Create a simple emoji picker dialog
+          const emojiList = ['🤖', '👍', '❤️', '😂', '😮', '😢', '🙏', '🍪', '⭐', '🎉', '✅', '❌', '💡', '🔥', '💯'];
+          
+          const dialog = new frappe.ui.Dialog({
+            title: __('Select Emoji'),
+            fields: [
+              {
+                fieldtype: 'HTML',
+                options: `
+                  <div style="padding: 20px; text-align: center;">
+                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
+                      ${emojiList.map(emoji => `
+                        <button type="button" class="btn btn-default emoji-option" data-emoji="${emoji}" style="font-size: 24px; padding: 10px; min-width: 50px;">
+                          ${emoji}
+                        </button>
+                      `).join('')}
+                    </div>
+                    <div class="form-group">
+                      <label>Or enter custom emoji:</label>
+                      <input type="text" class="form-control custom-emoji-input" placeholder="e.g., 🍪" maxlength="10" style="text-align: center; font-size: 20px;">
+                    </div>
+                  </div>
+                `
+              }
+            ],
+            primary_action_label: __('Set Emoji'),
+            primary_action(values) {
+              const selectedEmoji = dialog.selectedEmoji || values.custom_emoji || '🤖';
+              frm.set_value('wa_reaction_emoji', selectedEmoji);
+              $emojiBtn.find('.emoji-display').text(selectedEmoji);
+              dialog.hide();
+            }
+          });
+          
+          // Handle emoji option clicks
+          dialog.$wrapper.on('click', '.emoji-option', function() {
+            dialog.selectedEmoji = $(this).data('emoji');
+            dialog.$wrapper.find('.emoji-option').removeClass('btn-primary').addClass('btn-default');
+            $(this).removeClass('btn-default').addClass('btn-primary');
+          });
+          
+          // Handle custom emoji input
+          dialog.$wrapper.on('input', '.custom-emoji-input', function() {
+            dialog.selectedEmoji = null; // Clear selected when typing custom
+            dialog.$wrapper.find('.emoji-option').removeClass('btn-primary').addClass('btn-default');
+          });
+          
+          dialog.show();
+        });
+        
+        // Update emoji display when field value changes
+        emojiField.$input.on('change', function() {
+          $emojiBtn.find('.emoji-display').text(frm.doc.wa_reaction_emoji || '🤖');
+        });
+        
+        $wrapper.append($emojiBtn);
+      }
+    }
 
     // Debug Environment
     frm.add_custom_button(__('Debug Environment'), () => {

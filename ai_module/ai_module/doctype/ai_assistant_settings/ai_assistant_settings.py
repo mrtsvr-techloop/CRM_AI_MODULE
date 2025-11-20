@@ -266,6 +266,8 @@ class AIAssistantSettings(Document):
 		# When use_settings_override is OFF, these are defaults for display only
 		if not hasattr(self, "wa_enable_reaction") or self.wa_enable_reaction is None:
 			self.wa_enable_reaction = 0  # Default: false
+		if not hasattr(self, "wa_reaction_emoji") or not self.wa_reaction_emoji:
+			self.wa_reaction_emoji = "🤖"  # Default: robot emoji
 		if not hasattr(self, "wa_enable_autoreply") or self.wa_enable_autoreply is None:
 			self.wa_enable_autoreply = 1  # Default: true
 		if not hasattr(self, "wa_force_inline") or self.wa_force_inline is None:

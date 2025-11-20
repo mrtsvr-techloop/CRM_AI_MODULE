@@ -232,8 +232,25 @@ def _should_show_reaction() -> bool:
 	return env_value in {"1", "true", "yes", "on"}
 
 
+def _get_reaction_emoji() -> str:
+	"""Get the emoji to use for reactions from settings or environment."""
+	settings = _get_ai_settings()
+	if settings and getattr(settings, "use_settings_override", 0):
+		emoji = getattr(settings, "wa_reaction_emoji", None)
+		if emoji:
+			return emoji.strip()
+	
+	# Fall back to environment variable
+	env_value = (get_environment().get("AI_WHATSAPP_REACTION_EMOJI") or "").strip()
+	if env_value:
+		return env_value
+	
+	# Default emoji
+	return "🤖"
+
+
 def _send_reaction(payload: Dict[str, Any]) -> None:
-	"""Send a reaction emoji (🤖) to the incoming message before AI processing."""
+	"""Send a reaction emoji to the incoming message before AI processing."""
 	try:
 		from crm.api.whatsapp import react_on_whatsapp_message
 		
@@ -242,17 +259,29 @@ def _send_reaction(payload: Dict[str, Any]) -> None:
 		if not message_name:
 			return
 		
-		# Send robot emoji reaction
-		react_on_whatsapp_message("🤖", message_name)
-		_log().info(f"Sent reaction 🤖 to message {message_name}")
+		# Get emoji from settings
+		emoji = _get_reaction_emoji()
+		if not emoji:
+			emoji = "🤖"  # Fallback default
+		
+		# Send reaction emoji
+		react_on_whatsapp_message(emoji, message_name)
+		_log().info(f"Sent reaction {emoji} to message {message_name}")
 	except Exception as e:
 		_log().warning(f"Failed to send reaction: {e}")
 		# Don't fail the whole process if reaction fails
 
 
+def _normalize_phone(phone: str) -> str:
+	"""Normalize phone number by removing spaces, dashes, parentheses, and + sign."""
+	if not phone:
+		return ""
+	return phone.strip().replace(" ", "").replace("-", "").replace("(", "").replace(")", "").replace("+", "")
+
+
 def _mark_human_activity(phone: str) -> None:
 	"""Record the time a human sent an outgoing message to this phone."""
-	key = (phone or "").strip()
+	key = _normalize_phone(phone or "")
 	if not key:
 		return
 	
@@ -280,7 +309,7 @@ def _human_cooldown_seconds() -> int:
 
 def _is_human_active(phone: str) -> bool:
 	"""Return True if a human messaged this phone within the cooldown window."""
-	key = (phone or "").strip()
+	key = _normalize_phone(phone or "")
 	if not key:
 		return False
 	

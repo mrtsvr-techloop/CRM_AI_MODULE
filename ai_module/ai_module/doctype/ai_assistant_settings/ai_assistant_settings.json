@@ -139,9 +139,17 @@
 		},
 		{
 			"fieldname": "wa_enable_reaction",
-			"label": "Show reaction before AI processing (🤖)",
+			"label": "Show reaction before AI processing",
 			"fieldtype": "Check",
 			"default": 0
+		},
+		{
+			"fieldname": "wa_reaction_emoji",
+			"label": "Reaction Emoji",
+			"fieldtype": "Data",
+			"default": "🤖",
+			"depends_on": "eval:doc.wa_enable_reaction==1",
+			"description": "Emoji to send as reaction when AI starts processing (default: 🤖)"
 		},
 		{
 			"fieldname": "wa_enable_autoreply",

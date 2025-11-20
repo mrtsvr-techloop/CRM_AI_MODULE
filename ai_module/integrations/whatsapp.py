@@ -222,6 +222,34 @@ def _get_ai_settings() -> Optional[Any]:
 		return None
 
 
+def _should_show_reaction() -> bool:
+	"""Check if reaction should be shown before AI processing."""
+	settings = _get_ai_settings()
+	if settings and getattr(settings, "use_settings_override", 0):
+		return bool(getattr(settings, "wa_enable_reaction", 0))
+	
+	env_value = (get_environment().get("AI_WHATSAPP_REACTION") or "").strip().lower()
+	return env_value in {"1", "true", "yes", "on"}
+
+
+def _send_reaction(payload: Dict[str, Any]) -> None:
+	"""Send a reaction emoji (🤖) to the incoming message before AI processing."""
+	try:
+		from crm.api.whatsapp import react_on_whatsapp_message
+		
+		# Get the message document name
+		message_name = payload.get("name")
+		if not message_name:
+			return
+		
+		# Send robot emoji reaction
+		react_on_whatsapp_message("🤖", message_name)
+		_log().info(f"Sent reaction 🤖 to message {message_name}")
+	except Exception as e:
+		_log().warning(f"Failed to send reaction: {e}")
+		# Don't fail the whole process if reaction fails
+
+
 def _mark_human_activity(phone: str) -> None:
 	"""Record the time a human sent an outgoing message to this phone."""
 	key = (phone or "").strip()
@@ -502,9 +530,13 @@ def on_whatsapp_after_insert(doc, method=None):
 		
 		apply_environment()
 		
-		# Handle outgoing messages
+		# Handle outgoing messages - mark human activity for cooldown
 		if (doc.type or "").lower() == "outgoing":
-			_mark_human_activity(doc.get("to"))
+			# Check if this is a manual message (human sent from CRM)
+			message_label = (doc.get("label") or "").strip()
+			if message_label == "Manual":
+				# Mark human activity when manual message is sent
+				_mark_human_activity(doc.get("to"))
 			return
 		
 		# Skip non-incoming messages and reactions
@@ -709,6 +741,10 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		# Extract message details
 		phone = (payload.get("from") or "").strip()
 		message_text = (payload.get("message") or "").strip()
+		
+		# Send reaction if enabled (before processing)
+		if _should_show_reaction():
+			_send_reaction(payload)
 		
 		# Get or create session for this phone
 		session_id = _get_or_create_thread_for_phone(phone)

@@ -742,7 +742,14 @@ def process_incoming_whatsapp_message(payload: Dict[str, Any]):
 		phone = (payload.get("from") or "").strip()
 		message_text = (payload.get("message") or "").strip()
 		
-		# Send reaction if enabled (before processing)
+		# Check if human is actively handling this conversation (cooldown check)
+		# This check is done here too to ensure we don't send reaction if cooldown is active
+		is_human_active = _is_human_active(phone)
+		if is_human_active:
+			logger.info(f"Human active recently (cooldown); skipping AI processing and reaction for {phone}")
+			return
+		
+		# Send reaction if enabled - only if AI is taking over the request
 		if _should_show_reaction():
 			_send_reaction(payload)
 		
